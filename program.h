@@ -7,7 +7,10 @@
  */
 
 #include <stdio.h>
-
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 /**
  * boolean type 0 = false, true otherwise
@@ -30,4 +33,10 @@ struct amqp_connection_info {
   amqp_boolean_t ssl;
 };
 
+/*
+Function Prototypes
+*/
+
+/* Initialize TCP client socket */
+int initClientSocket(int *, const char *, int);
 #endif
