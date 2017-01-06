@@ -3,10 +3,26 @@
 #define SERVER_PORT 5672
 #define STOP_RECV_TRANS 2
 
+// Frame Types
+#define METHOD_FRAME    1
+#define HEADER_FRAME    2
+#define BODY_FRAME      3
+#define HEARTBEAT_FRAME 4
+
+// General Frame Structure
+// Section 4.2.3
+struct General_Frame {
+    char type;
+    unsigned short channel;
+    unsigned int size;
+    char* payload;  /* The payload length should be equal to 'size' */
+    char frame_end;
+};
+
 int main(int argc, char** argv) {
 
     char recvBuff[1024];
-    char buffer[9];// = "AMQP0091";
+    char buffer[] = {'A', 'M', 'Q', 'P', 0, 0, 9, 1};
     int sockfd = 0;
     int readLength, writeLength;
 
@@ -18,7 +34,7 @@ int main(int argc, char** argv) {
         printf("Good connection!\n");
         // then probably a login
         // localhost 5671 guest/guest
-
+/*
         buffer[0] = 'A';
         buffer[1] = 'M';
         buffer[2] = 'Q';
@@ -27,7 +43,7 @@ int main(int argc, char** argv) {
         buffer[5] = 0;
         buffer[6] = 9;
         buffer[7] = 1;
-        buffer[8] = '\0';
+*/
         // send some data
         printf("Writing: %s\n", buffer);
         if ((writeLength = write(sockfd, buffer, strlen(buffer))) < 0)
