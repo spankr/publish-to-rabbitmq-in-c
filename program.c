@@ -11,6 +11,7 @@
 
 // General Frame Structure
 // Section 4.2.3
+// see https://www.rabbitmq.com/resources/specs/amqp0-9-1.pdf
 struct General_Frame {
     char type;
     unsigned short channel;
