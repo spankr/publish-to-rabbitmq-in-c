@@ -129,7 +129,7 @@ char* GeneralFrameToBuffer(struct General_Frame* frame)
     int payloadSize = frame->size;
     int bufSize = sizeof(frame->type) + sizeof(frame->channel) + sizeof(frame->size) + payloadSize + sizeof(frame->end);
 
-    char *buf = (char*) malloc(bufSize);
+    char* buf = (char*) malloc(bufSize);
 
     if (buf == 0)
     {
