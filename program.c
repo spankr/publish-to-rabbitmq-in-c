@@ -17,7 +17,7 @@ struct General_Frame {
     unsigned short channel;
     unsigned int size;
     char* payload;  /* The payload length should be equal to 'size' */
-    char frame_end;
+    char end;// = 0xCE;
 };
 
 int main(int argc, char** argv) {
@@ -122,4 +122,30 @@ int initClientSocket(int * sock, const char * server_ip, int port)
     }
 
 	return 0;
+}
+
+char* GeneralFrameToBuffer(struct General_Frame* frame)
+{
+    int payloadSize = frame->size;
+    int bufSize = sizeof(frame->type) + sizeof(frame->channel) + sizeof(frame->size) + payloadSize + sizeof(frame->end);
+
+    char *buf = (char*) malloc(bufSize);
+
+    if (buf == 0)
+    {
+        printf("Unable to allocate buffer space for General Frame\n");
+    }
+
+    char *tmp = buf;
+    *tmp++ = frame->type;
+
+    *tmp = frame->channel;
+    tmp += sizeof(frame->channel);
+
+    *tmp = frame->size;
+    tmp += sizeof(frame->size);
+
+    // TODO payload
+
+    return buf;
 }
