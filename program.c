@@ -8,17 +8,18 @@
 #define HEADER_FRAME    2
 #define BODY_FRAME      3
 #define HEARTBEAT_FRAME 4
+#define FRAME_TERMINATOR 0xCE
 
 // General Frame Structure
 // Section 4.2.3
 // see https://www.rabbitmq.com/resources/specs/amqp0-9-1.pdf
 // see https://www.rabbitmq.com/resources/specs/amqp0-9-1.xml
 struct General_Frame {
-    char type;
+    unsigned char type;
     unsigned short channel;
     unsigned int size;
     void* payload;  /* The payload length should be equal to 'size' */
-    char end;// = 0xCE;
+    unsigned char end;// = 0xCE;
 };
 
 // in the xml spec, these ids are acually labelled as "index"
@@ -28,16 +29,18 @@ struct General_Frame {
 #define START_OK_METHOD 11
 
 struct Method_Frame_Payload {
-    short classId;
-    short methodId;
+    unsigned short classId;
+    unsigned short methodId;
     void* arguments;
 };
-char* GeneralFrameToBuffer(struct General_Frame*);
+unsigned char* GeneralFrameToBuffer(struct General_Frame*);
+void GetGeneralFrameFromBuffer(struct General_Frame*, unsigned char*, int);
+void GetMethodPayloadFromBuffer(unsigned char*, int);
 
 int main(int argc, char** argv) {
 
-    char recvBuff[1024];
-    char buffer[] = {'A', 'M', 'Q', 'P', 0, 0, 9, 1};
+    unsigned char recvBuff[1024];
+    unsigned char buffer[] = {'A', 'M', 'Q', 'P', 0, 0, 9, 1};
     int sockfd = 0;
     int readLength, writeLength;
 
@@ -65,16 +68,7 @@ int main(int argc, char** argv) {
         printf("Good connection!\n");
         // then probably a login
         // localhost 5671 guest/guest
-/*
-        buffer[0] = 'A';
-        buffer[1] = 'M';
-        buffer[2] = 'Q';
-        buffer[3] = 'P';
-        buffer[4] = 0;
-        buffer[5] = 0;
-        buffer[6] = 9;
-        buffer[7] = 1;
-*/
+
         // send some data
         printf("Writing: [%s](%lu)\n", buffer, sizeof(buffer));
         if ((writeLength = send(sockfd, buffer, sizeof(buffer), 0)) < 0)
@@ -96,19 +90,13 @@ int main(int argc, char** argv) {
         {
             printf("Read %d bytes\n", readLength);
 
-            recvBuff[readLength] = 0;
-            for (int i = 0;i<readLength;i++)
+            for (int i = 0;i<15;i++)
             {
                 printf("Byte[%d]: %d\n", i, recvBuff[i]);
+            }
+//            printf("%s\n", recvBuff);
 
-            }
-            printf("%s\n", recvBuff);
-            /*
-            if(fputs(recvBuff, stdout) == EOF)
-            {
-                printf("\n Error : Fputs error\n");
-            }
-            */
+            GetGeneralFrameFromBuffer(0L, recvBuff, readLength);
         } 
         printf("Done reading\n");
 
@@ -162,13 +150,13 @@ int initClientSocket(int * sock, const char * server_ip, int port)
 	return 0;
 }
 
-char* GeneralFrameToBuffer(struct General_Frame* frame)
+unsigned char* GeneralFrameToBuffer(struct General_Frame* frame)
 {
     int payloadSize = frame->size;
     int bufSize = sizeof(frame->type) + sizeof(frame->channel) + sizeof(frame->size) + payloadSize + sizeof(frame->end);
 
-    char* buf = (char*) malloc(bufSize);
-    char *tmp = buf;
+    unsigned char* buf = (unsigned char*) malloc(bufSize);
+    unsigned char *tmp = buf;
 
     if (buf == NULL)
     {
@@ -191,8 +179,65 @@ char* GeneralFrameToBuffer(struct General_Frame* frame)
         tmp += sizeof(frame->end);
     }
 
-
-    // TODO payload
-
     return buf;
+}
+
+void GetGeneralFrameFromBuffer(struct General_Frame* frame, unsigned char* buf, int length)
+{
+    unsigned char type;
+    unsigned short channel;
+    unsigned int size;
+    void* payload;  /* The payload length should be equal to 'size' */
+    unsigned char end;// = 0xCE;
+    unsigned char* tmp = buf;
+
+    end = buf[length-1];
+
+    if (end != FRAME_TERMINATOR)
+    {
+        printf("WARNING! Frame not properly terminated!\n");
+    }
+
+    type = *tmp++;
+
+    channel = toShort(tmp);
+    tmp += 2;
+
+    size = toInt(tmp);
+    tmp += 4;
+
+    printf("General Frame:\n");
+    printf("  Type: %d\n", type);
+    printf("  Channel: %d\n", channel);
+    printf("  Size: %d\n", size);
+    printf("  End: 0x%x\n", end);
+
+    if (type == METHOD_FRAME) {
+        GetMethodPayloadFromBuffer(tmp, size);
+    }
+}
+
+void GetMethodPayloadFromBuffer(unsigned char* buf, int length)
+{
+    unsigned char* tmp = buf;
+
+    unsigned short classId;
+    unsigned short methodId;
+/*
+    for (int i = 0;i<10;i++)
+    {
+        printf("Byte[%d]: %d\n", i, buf[i]);
+    }
+*/
+    classId = toShort(tmp);
+    tmp += sizeof(unsigned short);
+
+    methodId = toShort(tmp);
+    tmp += sizeof(unsigned short);
+
+    printf("Method Payload:\n");
+    printf("  Class Id: %d\n", classId);
+    printf("  Method Id: %d\n", methodId);
+
+    // TODO Dig up arguments
 }

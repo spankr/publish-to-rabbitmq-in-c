@@ -42,4 +42,7 @@ Function Prototypes
 
 /* Initialize TCP client socket */
 int initClientSocket(int *, const char *, int);
+
+unsigned short toShort(unsigned char*);
+unsigned int toInt(unsigned char*);
 #endif
