@@ -12,6 +12,7 @@
 // General Frame Structure
 // Section 4.2.3
 // see https://www.rabbitmq.com/resources/specs/amqp0-9-1.pdf
+// see https://www.rabbitmq.com/resources/specs/amqp0-9-1.xml
 struct General_Frame {
     char type;
     unsigned short channel;
@@ -29,7 +30,7 @@ struct General_Frame {
 struct Method_Frame_Payload {
     short classId;
     short methodId;
-    void arguments;
+    void* arguments;
 };
 char* GeneralFrameToBuffer(struct General_Frame*);
 
@@ -44,12 +45,12 @@ int main(int argc, char** argv) {
         METHOD_FRAME,
         0,
         5,
-        null,
+        NULL,
         0xCE
     };
 
     printf("Hello World\n");
-
+/*
     char* buf = GeneralFrameToBuffer(&frm);
     for (int i=0;i<13;i++)
     {
@@ -57,7 +58,7 @@ int main(int argc, char** argv) {
     }
     free(buf);
     return 0;
-
+*/
     // We will need to open a socket.
     if (initClientSocket(&sockfd, "127.0.0.1", SERVER_PORT) >= 0)
     {
@@ -75,20 +76,20 @@ int main(int argc, char** argv) {
         buffer[7] = 1;
 */
         // send some data
-        printf("Writing: %s\n", buffer);
-        if ((writeLength = send(sockfd, buffer, strlen(buffer), 0)) < 0)
+        printf("Writing: [%s](%lu)\n", buffer, sizeof(buffer));
+        if ((writeLength = send(sockfd, buffer, sizeof(buffer), 0)) < 0)
         {
             // error("ERROR writing to socket");
             return -1;
         }
-
+/*
         printf("Sending a START\n");
         if ((writeLength = send(sockfd, "start", 5, 0)) < 0)
         {
             // error("ERROR writing to socket");
             return -1;
         }
-
+*/
         // listen for data
         printf("Reading\n");
         while ( (readLength = recv(sockfd, recvBuff, sizeof(recvBuff)-1, 0)) > 0)
@@ -109,6 +110,7 @@ int main(int argc, char** argv) {
             }
             */
         } 
+        printf("Done reading\n");
 
         // Shutdown our connection
         if (shutdown(sockfd, STOP_RECV_TRANS) < 0)
