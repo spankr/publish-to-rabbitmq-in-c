@@ -36,6 +36,7 @@ struct Method_Frame_Payload {
 unsigned char* GeneralFrameToBuffer(struct General_Frame*);
 void GetGeneralFrameFromBuffer(struct General_Frame*, unsigned char*, int);
 void GetMethodPayloadFromBuffer(unsigned char*, int);
+int ExtractFieldTable(unsigned char*);
 
 int main(int argc, char** argv) {
 
@@ -90,7 +91,7 @@ int main(int argc, char** argv) {
         {
             printf("Read %d bytes\n", readLength);
 
-            for (int i = 0;i<15;i++)
+            for (int i = 0;i<35;i++)
             {
                 printf("Byte[%d]: %d\n", i, recvBuff[i]);
             }
@@ -239,5 +240,62 @@ void GetMethodPayloadFromBuffer(unsigned char* buf, int length)
     printf("  Class Id: %d\n", classId);
     printf("  Method Id: %d\n", methodId);
 
-    // TODO Dig up arguments
+    unsigned char majorVersion = *tmp++;
+    unsigned char minorVersion = *tmp++;
+
+    printf("  Major Version: %d\n", majorVersion);
+    printf("  Minor Version: %d\n", minorVersion);
+
+    // TODO server-properties
+    // https://www.rabbitmq.com/amqp-0-9-1-reference.html#domain.peer-properties
+
+    // Field Tables are long strings that contained packed key-value pairs
+    // Pair:
+    //   name (short string)  short string is 'unsigned short' length + char array of data (0 -> 255 chars)
+    //   value type (byte)
+    //   value (?)
+    tmp += ExtractFieldTable(tmp);
+
+    // mechanisms (long string)
+    // long string is a 32-bit integer length value + character array
+    unsigned int mechLength = toInt(tmp);
+    printf("Mechanism length %d\n", mechLength);
+    tmp += 4;
+    for (int i=0;i<mechLength;i++)
+    {
+        printf("%c", *tmp++);
+    }
+//    char* mechanisms = (char*) malloc(mechLength);
+//    memcpy(mechanisms, tmp, mechLength);
+//    tmp += mechLength;
+//    printf("  Mechanisms: %s\n", mechanisms);
+    printf("\n");
+
+    // locales (long string)
+    unsigned int localeLength = toInt(tmp);
+    printf("Locale length %d\n", localeLength);
+    tmp += 4;
+    for (int i=0;i<localeLength;i++)
+    {
+        printf("%c", *tmp++);
+    }
+    printf("\n");
+//    char* locales = (char*) malloc(localeLength);
+//    memcpy(locales, tmp, localeLength);
+//    tmp += localeLength;
+//    printf("  Locales: %s\n", locales);
+
+    //free(mechanisms);
+    //free(locales);
+}
+
+int ExtractFieldTable(unsigned char* buf)
+{
+    unsigned char* tmp = buf;
+    unsigned int tableLength = toInt(tmp);
+    tmp += 4;
+
+    printf("Field Table length: %d\n", tableLength);
+
+    return tableLength+4;
 }
