@@ -16,9 +16,22 @@ struct General_Frame {
     char type;
     unsigned short channel;
     unsigned int size;
-    char* payload;  /* The payload length should be equal to 'size' */
+    void* payload;  /* The payload length should be equal to 'size' */
     char end;// = 0xCE;
 };
+
+// in the xml spec, these ids are acually labelled as "index"
+#define CONNECTION_CLASS 10
+
+#define START_METHOD 10
+#define START_OK_METHOD 11
+
+struct Method_Frame_Payload {
+    short classId;
+    short methodId;
+    void arguments;
+};
+char* GeneralFrameToBuffer(struct General_Frame*);
 
 int main(int argc, char** argv) {
 
@@ -27,7 +40,23 @@ int main(int argc, char** argv) {
     int sockfd = 0;
     int readLength, writeLength;
 
+    struct General_Frame frm = { 
+        METHOD_FRAME,
+        0,
+        5,
+        null,
+        0xCE
+    };
+
     printf("Hello World\n");
+
+    char* buf = GeneralFrameToBuffer(&frm);
+    for (int i=0;i<13;i++)
+    {
+        printf("0x%x:%c\n", buf[i], buf[i]);
+    }
+    free(buf);
+    return 0;
 
     // We will need to open a socket.
     if (initClientSocket(&sockfd, "127.0.0.1", SERVER_PORT) >= 0)
@@ -47,7 +76,14 @@ int main(int argc, char** argv) {
 */
         // send some data
         printf("Writing: %s\n", buffer);
-        if ((writeLength = write(sockfd, buffer, strlen(buffer))) < 0)
+        if ((writeLength = send(sockfd, buffer, strlen(buffer), 0)) < 0)
+        {
+            // error("ERROR writing to socket");
+            return -1;
+        }
+
+        printf("Sending a START\n");
+        if ((writeLength = send(sockfd, "start", 5, 0)) < 0)
         {
             // error("ERROR writing to socket");
             return -1;
@@ -55,7 +91,7 @@ int main(int argc, char** argv) {
 
         // listen for data
         printf("Reading\n");
-        while ( (readLength = read(sockfd, recvBuff, sizeof(recvBuff)-1)) > 0)
+        while ( (readLength = recv(sockfd, recvBuff, sizeof(recvBuff)-1, 0)) > 0)
         {
             printf("Read %d bytes\n", readLength);
 
@@ -130,20 +166,29 @@ char* GeneralFrameToBuffer(struct General_Frame* frame)
     int bufSize = sizeof(frame->type) + sizeof(frame->channel) + sizeof(frame->size) + payloadSize + sizeof(frame->end);
 
     char* buf = (char*) malloc(bufSize);
+    char *tmp = buf;
 
-    if (buf == 0)
+    if (buf == NULL)
     {
         printf("Unable to allocate buffer space for General Frame\n");
+    } 
+    else 
+    {
+        *tmp++ = frame->type;
+
+        *tmp = frame->channel;
+        tmp += sizeof(frame->channel);
+
+        *tmp = frame->size;
+        tmp += sizeof(frame->size);
+
+        memcpy(tmp, frame->payload, frame->size);
+        tmp += frame->size;
+
+        *tmp = frame->end;
+        tmp += sizeof(frame->end);
     }
 
-    char *tmp = buf;
-    *tmp++ = frame->type;
-
-    *tmp = frame->channel;
-    tmp += sizeof(frame->channel);
-
-    *tmp = frame->size;
-    tmp += sizeof(frame->size);
 
     // TODO payload
 
