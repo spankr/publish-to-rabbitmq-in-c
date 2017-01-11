@@ -319,7 +319,7 @@ int ExtractFieldTable(unsigned char* buf)
         printf("Value Type: '%c'\n", tmp[0]);
         struct LongString tmpLongString;
         switch(tmp[0]) {
-            case 'F': // field type
+            case 'F': // field type, treat as a simple long string for now
                 tmp++;
                 bytesToRead -= 1;
                 ExtractLongString(&tmp, &tmpLongString);
@@ -332,7 +332,7 @@ int ExtractFieldTable(unsigned char* buf)
                 tmp++;
                 bytesToRead -= 1;
                 ExtractLongString(&tmp, &tmpLongString);
-                printf("%s [%d, %s]\n", key.content, tmpLongString.length, tmpLongString.content);
+                printf("%s [%s]\n", key.content, tmpLongString.content);
                 bytesToRead -= 4;
                 bytesToRead -= tmpLongString.length;
                 free(tmpLongString.content);
