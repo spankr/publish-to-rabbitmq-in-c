@@ -3,40 +3,12 @@
 #define SERVER_PORT 5672
 #define STOP_RECV_TRANS 2
 
-// Frame Types
-#define METHOD_FRAME    1
-#define HEADER_FRAME    2
-#define BODY_FRAME      3
-#define HEARTBEAT_FRAME 4
-#define FRAME_TERMINATOR 0xCE
-
-// General Frame Structure
-// Section 4.2.3
-// see https://www.rabbitmq.com/resources/specs/amqp0-9-1.pdf
-// see https://www.rabbitmq.com/resources/specs/amqp0-9-1.xml
-struct General_Frame {
-    unsigned char type;
-    unsigned short channel;
-    unsigned int size;
-    void* payload;  /* The payload length should be equal to 'size' */
-    unsigned char end;// = 0xCE;
-};
-
-// in the xml spec, these ids are acually labelled as "index"
-#define CONNECTION_CLASS 10
-
-#define START_METHOD 10
-#define START_OK_METHOD 11
-
-struct Method_Frame_Payload {
-    unsigned short classId;
-    unsigned short methodId;
-    void* arguments;
-};
 unsigned char* GeneralFrameToBuffer(struct General_Frame*);
 void GetGeneralFrameFromBuffer(struct General_Frame*, unsigned char*, int);
 void GetMethodPayloadFromBuffer(unsigned char*, int);
 int ExtractFieldTable(unsigned char*);
+void ExtractShortString(unsigned char** in, struct ShortString* out);
+void ExtractLongString(unsigned char** in, struct LongString* out);
 
 int main(int argc, char** argv) {
 
@@ -86,7 +58,53 @@ int main(int argc, char** argv) {
         }
 */
         // listen for data
-        printf("Reading\n");
+        printf("Read the Connection.Start method frame\n");
+        if ( (readLength = recv(sockfd, recvBuff, sizeof(recvBuff)-1, 0)) <= 0)
+        {
+            // error("ERROR reading from socket");
+            return -1;
+        }
+
+        GetGeneralFrameFromBuffer(0L, recvBuff, readLength);
+
+        // Now lets send a Connection.Start-OK method frame back
+        // Class ID: 10
+        // Method ID: 11
+        // Mechanism: "PLAIN"
+        // Response: 
+        // Locale: "en_US"
+/*
+        unsigned char StartOkMethodPayload[] = {
+            0,10,
+            0,11,
+            0, // client properties?
+            5,'P','L','A','I','N', // "PLAIN"
+            0,12, 0,'g','u','e','s','t',0,'g','u','e','s','t', // in long format: 0,'guest', 0,'guest'
+            5,'e','n','_','U','S' // "en_US"
+        };
+
+*/
+        unsigned char StartOkMethodFrame[] = {
+            1,
+            0,0,
+            0,0,0,31,
+            0,10,
+            0,11,
+            0, // client properties?
+            5,'P','L','A','I','N', // "PLAIN"
+            0,12, 0,'g','u','e','s','t',0,'g','u','e','s','t', // in long format: 0,'guest', 0,'guest'
+            5,'e','n','_','U','S', // "en_US"
+            0xCE
+        };
+
+        printf("Size of Start-OK: %lu\n", sizeof(StartOkMethodFrame));
+        if ((writeLength = send(sockfd, StartOkMethodFrame, sizeof(StartOkMethodFrame), 0)) < 0)
+        {
+            // error("ERROR writing to socket");
+            return -1;
+        }
+
+        printf("Waiting for response from start-ok\n");
         while ( (readLength = recv(sockfd, recvBuff, sizeof(recvBuff)-1, 0)) > 0)
         {
             printf("Read %d bytes\n", readLength);
@@ -99,6 +117,7 @@ int main(int argc, char** argv) {
 
             GetGeneralFrameFromBuffer(0L, recvBuff, readLength);
         } 
+
         printf("Done reading\n");
 
         // Shutdown our connection
@@ -201,10 +220,10 @@ void GetGeneralFrameFromBuffer(struct General_Frame* frame, unsigned char* buf, 
 
     type = *tmp++;
 
-    channel = toShort(tmp);
+    channel = BytesToShort(tmp);
     tmp += 2;
 
-    size = toInt(tmp);
+    size = BytesToInt(tmp);
     tmp += 4;
 
     printf("General Frame:\n");
@@ -230,10 +249,10 @@ void GetMethodPayloadFromBuffer(unsigned char* buf, int length)
         printf("Byte[%d]: %d\n", i, buf[i]);
     }
 */
-    classId = toShort(tmp);
+    classId = BytesToShort(tmp);
     tmp += sizeof(unsigned short);
 
-    methodId = toShort(tmp);
+    methodId = BytesToShort(tmp);
     tmp += sizeof(unsigned short);
 
     printf("Method Payload:\n");
@@ -258,44 +277,106 @@ void GetMethodPayloadFromBuffer(unsigned char* buf, int length)
 
     // mechanisms (long string)
     // long string is a 32-bit integer length value + character array
-    unsigned int mechLength = toInt(tmp);
-    printf("Mechanism length %d\n", mechLength);
-    tmp += 4;
-    for (int i=0;i<mechLength;i++)
-    {
-        printf("%c", *tmp++);
-    }
-//    char* mechanisms = (char*) malloc(mechLength);
-//    memcpy(mechanisms, tmp, mechLength);
-//    tmp += mechLength;
-//    printf("  Mechanisms: %s\n", mechanisms);
-    printf("\n");
+    struct LongString mechanism, locale;
 
-    // locales (long string)
-    unsigned int localeLength = toInt(tmp);
-    printf("Locale length %d\n", localeLength);
-    tmp += 4;
-    for (int i=0;i<localeLength;i++)
-    {
-        printf("%c", *tmp++);
-    }
-    printf("\n");
-//    char* locales = (char*) malloc(localeLength);
-//    memcpy(locales, tmp, localeLength);
-//    tmp += localeLength;
-//    printf("  Locales: %s\n", locales);
+    ExtractLongString(&tmp, &mechanism);
+    printf("Mechanism [%d, %s]\n", mechanism.length, mechanism.content);
+    free(mechanism.content);
 
-    //free(mechanisms);
-    //free(locales);
+    ExtractLongString(&tmp, &locale);
+    printf("Locale [%d, %s]\n", locale.length, locale.content);
+    free(locale.content);
 }
 
+// Field Tables are long strings that contained packed key-value pairs
+// Pair:
+//   name (short string)  short string is 'unsigned short' length + char array of data (0 -> 255 chars)
+//   value type (byte)
+//   value (?)
 int ExtractFieldTable(unsigned char* buf)
 {
     unsigned char* tmp = buf;
-    unsigned int tableLength = toInt(tmp);
-    tmp += 4;
 
-    printf("Field Table length: %d\n", tableLength);
+    struct LongString table;
+    ExtractLongString(&tmp, &table);
+    printf("Field Table length: %d\n", table.length);
+    printf("Field Table content: ");
+    for (int i=0;i<table.length;i++){
+        printf("[%c]", table.content[i]);
+    }
+    printf("\n");
+    int bytesToRead = table.length;
 
-    return tableLength+4;
+    tmp = table.content;
+    struct ShortString key;
+    while (bytesToRead>0)
+    {
+        ExtractShortString(&tmp, &key);
+        bytesToRead -= 1;
+        bytesToRead -= key.length;
+        printf("Key: [%d, %s]\n", key.length, key.content);
+
+        printf("Value Type: '%c'\n", tmp[0]);
+        struct LongString tmpLongString;
+        switch(tmp[0]) {
+            case 'F': // field type
+                tmp++;
+                bytesToRead -= 1;
+                ExtractLongString(&tmp, &tmpLongString);
+                printf("Field Table length: %d\n", tmpLongString.length);
+                bytesToRead -= 4;
+                bytesToRead -= tmpLongString.length;
+                free(tmpLongString.content);
+                break;
+            case 'S': // long string
+                tmp++;
+                bytesToRead -= 1;
+                ExtractLongString(&tmp, &tmpLongString);
+                printf("%s [%d, %s]\n", key.content, tmpLongString.length, tmpLongString.content);
+                bytesToRead -= 4;
+                bytesToRead -= tmpLongString.length;
+                free(tmpLongString.content);
+                break;                
+            default:
+                printf("WARNING: Unhandled Field Type\n");
+                break;
+        }
+        free(key.content);
+    }
+
+    free(table.content);
+
+    return table.length+4;
+}
+
+/**
+Extract an AMQP short-string and move the pointer to the next spot in the buffer.
+*/
+void ExtractShortString(unsigned char** in, struct ShortString* out)
+{
+    out->length = **in;
+    *in += 1;
+
+    // TODO Validate malloc
+    out->content = (char*) malloc(out->length+1);
+
+    memset(out->content, 0, out->length+1);
+    memcpy(out->content, *in, out->length);
+    *in += out->length;
+}
+
+/**
+Extract an AMQP long-string and move the pointer to the next spot in the buffer.
+*/
+void ExtractLongString(unsigned char** in, struct LongString* out)
+{
+    out->length = BytesToInt(*in);
+    *in += 4;
+
+    // TODO Validate malloc
+    out->content = (unsigned char*) malloc(out->length+1);
+
+    memset(out->content, 0, out->length+1);
+    memcpy(out->content, *in, out->length);
+    *in += out->length;
 }

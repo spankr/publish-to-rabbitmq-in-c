@@ -36,6 +36,61 @@ struct amqp_connection_info {
   amqp_boolean_t ssl;
 };
 
+// Frame Types
+#define METHOD_FRAME    1
+#define HEADER_FRAME    2
+#define BODY_FRAME      3
+#define HEARTBEAT_FRAME 4
+#define FRAME_TERMINATOR 0xCE
+
+// Types
+// The short-string type is an octet (unsigned char) plus the array of characters it holds.
+struct ShortString {
+    unsigned char length;
+    char* content;
+};
+
+// The long-string type is a bigger length field plus the array of bytes it holds.
+struct LongString {
+    unsigned int length;
+    unsigned char* content;
+};
+
+struct TableEntry {
+    struct ShortString name;
+    unsigned char type;
+    unsigned char* value;
+};
+
+struct FieldTable {
+    unsigned int length;
+    struct TableEntry* entries;
+};
+
+// General Frame Structure
+// Section 4.2.3
+// see https://www.rabbitmq.com/resources/specs/amqp0-9-1.pdf
+// see https://www.rabbitmq.com/resources/specs/amqp0-9-1.xml
+struct General_Frame {
+    unsigned char type;
+    unsigned short channel;
+    unsigned int size;
+    void* payload;  /* The payload length should be equal to 'size' */
+    unsigned char end;// = 0xCE;
+};
+
+// in the xml spec, these ids are acually labelled as "index"
+#define CONNECTION_CLASS 10
+
+#define START_METHOD 10
+#define START_OK_METHOD 11
+
+struct Method_Frame_Payload {
+    unsigned short classId;
+    unsigned short methodId;
+    void* arguments;
+};
+
 /*
 Function Prototypes
 */
@@ -43,6 +98,6 @@ Function Prototypes
 /* Initialize TCP client socket */
 int initClientSocket(int *, const char *, int);
 
-unsigned short toShort(unsigned char*);
-unsigned int toInt(unsigned char*);
+unsigned short BytesToShort(unsigned char*);
+unsigned int BytesToInt(unsigned char*);
 #endif
