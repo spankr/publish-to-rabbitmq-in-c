@@ -87,12 +87,12 @@ int main(int argc, char** argv) {
         unsigned char StartOkMethodFrame[] = {
             1,
             0,0,
-            0,0,0,31,
+            0,0,0,33,
             0,10,
             0,11,
             0, // client properties?
             5,'P','L','A','I','N', // "PLAIN"
-            0,12, 0,'g','u','e','s','t',0,'g','u','e','s','t', // in long format: 0,'guest', 0,'guest'
+            0,0,0,12, 0,'g','u','e','s','t',0,'g','u','e','s','t', // in long format: 0,'guest', 0,'guest'
             5,'e','n','_','U','S', // "en_US"
             0xCE
         };
@@ -379,4 +379,49 @@ void ExtractLongString(unsigned char** in, struct LongString* out)
     memset(out->content, 0, out->length+1);
     memcpy(out->content, *in, out->length);
     *in += out->length;
+}
+
+
+void BuildStartOkPayload()
+{
+    // class-id
+    // method-id
+    // client properties
+    char properties[] = {
+        // long string size
+
+        // long string data that contains:
+        //  short string key
+        // type char
+        // short string value
+//8+1+12+
+//8+1+8+
+//9+1+8+
+//12+1+23
+        92,
+        // product 'S', Lee Library
+        7,'p','r','o','d','u','c','t',
+        'S',
+        11,'L','e','e',' ','L','i','b','r','a','r','y',
+        // version 'S', unknown
+        7,'v','e','r','s','i','o','n',
+        'S',
+        7,'u','n','k','n','o','w','n',
+        // platform 'S', unknown
+        8,'p','l','a','t','f','o','r','m',
+        'S',
+        7,'u','n','k','n','o','w','n',
+        // information 'S', http://www.digikey.com
+        11,'i','n','f','o','r','m','a','t','i','o','n',
+        'S',
+        22,'h','t','t','p',':','/','/','w','w','w','.','d','i','g','i','k','e','y','.','c','o','m'
+
+    };
+    // mechanism (short string)
+    char mechanism[] = {5,'P','L','A','I','N'};
+    // response (long string)
+    char response[] = {0,0,0,12, 0,'g','u','e','s','t',0,'g','u','e','s','t'};
+    // locale (short string)
+    char locale[] = {5, 'e','n','_','U','S'};
+
 }
