@@ -9,11 +9,13 @@ void GetMethodPayloadFromBuffer(unsigned char*, int);
 int ExtractFieldTable(unsigned char*);
 void ExtractShortString(unsigned char** in, struct ShortString* out);
 void ExtractLongString(unsigned char** in, struct LongString* out);
+void BuildStartOkPayload(unsigned char** payload, int* length);
 
 int main(int argc, char** argv) {
 
     unsigned char recvBuff[1024];
     unsigned char buffer[] = {'A', 'M', 'Q', 'P', 0, 0, 9, 1};
+    unsigned char* tmp; /* temporary buffer */
     int sockfd = 0;
     int readLength, writeLength;
 
@@ -68,42 +70,62 @@ int main(int argc, char** argv) {
         GetGeneralFrameFromBuffer(0L, recvBuff, readLength);
 
         // Now lets send a Connection.Start-OK method frame back
-        // Class ID: 10
-        // Method ID: 11
-        // Mechanism: "PLAIN"
-        // Response: 
-        // Locale: "en_US"
-/*
-        unsigned char StartOkMethodPayload[] = {
-            0,10,
-            0,11,
-            0, // client properties?
-            5,'P','L','A','I','N', // "PLAIN"
-            0,12, 0,'g','u','e','s','t',0,'g','u','e','s','t', // in long format: 0,'guest', 0,'guest'
-            5,'e','n','_','U','S' // "en_US"
-        };
+        unsigned char* StartOkMethodFrame;
+        unsigned char* payload;
+        int payloadSize;
+        BuildStartOkPayload(&payload, &payloadSize);
 
-*/
-        unsigned char StartOkMethodFrame[] = {
-            1,
-            0,0,
-            0,0,0,33,
-            0,10,
-            0,11,
-            0, // client properties?
-            5,'P','L','A','I','N', // "PLAIN"
-            0,0,0,12, 0,'g','u','e','s','t',0,'g','u','e','s','t', // in long format: 0,'guest', 0,'guest'
-            5,'e','n','_','U','S', // "en_US"
-            0xCE
-        };
+        printf("Full Length of start-ok payload is %d\n", payloadSize);
 
-        printf("Size of Start-OK: %lu\n", sizeof(StartOkMethodFrame));
-        if ((writeLength = send(sockfd, StartOkMethodFrame, sizeof(StartOkMethodFrame), 0)) < 0)
+        StartOkMethodFrame = (unsigned char*) calloc(payloadSize+8, sizeof(unsigned char));
+        if (StartOkMethodFrame==0) {
+            return -1;
+        }
+        printf("Size of StartOkMethodFrame: %d\n", payloadSize+8);
+        tmp = StartOkMethodFrame;
+        // Frame Type
+        *tmp++ = METHOD_FRAME; // Method Frame Type
+        // Channel
+        *tmp++ = 0; // Channel 0, byte 1
+        *tmp++ = 0; // Channel 0, byte 2
+        // Payload Size
+        *tmp++ = (payloadSize >> 24) & 0xFF;
+        *tmp++ = (payloadSize >> 16) & 0xFF;
+        *tmp++ = (payloadSize >> 8) & 0xFF;
+        *tmp++ = payloadSize & 0xFF;
+        // Payload
+        for (int i=0;i<payloadSize;i++){
+            *tmp++ = payload[i];
+        }
+
+        // Frame Terminator
+        *tmp = FRAME_TERMINATOR;
+
+        free(payload);
+
+        // Dump our Start-Ok method frame to make sure we did it right
+        GetGeneralFrameFromBuffer(0L, StartOkMethodFrame, payloadSize+8);
+
+        if ((writeLength = send(sockfd, StartOkMethodFrame, payloadSize+8, 0)) < 0)
         {
             // error("ERROR writing to socket");
+            printf("Error writing start-ok\n");
             return -1;
         }
 
+        // listen for data
+        printf("Reading the response from start-ok method frame\n");
+        if ( (readLength = recv(sockfd, recvBuff, sizeof(recvBuff)-1, 0)) <= 0)
+        {
+            // error("ERROR reading from socket");
+            printf("Error reading start-ok %d\n", readLength);
+            return -1;
+        }
+
+        GetGeneralFrameFromBuffer(0L, recvBuff, readLength);
+
+
+/*
         printf("Waiting for response from start-ok\n");
         while ( (readLength = recv(sockfd, recvBuff, sizeof(recvBuff)-1, 0)) > 0)
         {
@@ -117,7 +139,7 @@ int main(int argc, char** argv) {
 
             GetGeneralFrameFromBuffer(0L, recvBuff, readLength);
         } 
-
+*/
         printf("Done reading\n");
 
         // Shutdown our connection
@@ -259,33 +281,62 @@ void GetMethodPayloadFromBuffer(unsigned char* buf, int length)
     printf("  Class Id: %d\n", classId);
     printf("  Method Id: %d\n", methodId);
 
-    unsigned char majorVersion = *tmp++;
-    unsigned char minorVersion = *tmp++;
+    if (classId==10 && methodId == 10)
+    {
+        unsigned char majorVersion = *tmp++;
+        unsigned char minorVersion = *tmp++;
 
-    printf("  Major Version: %d\n", majorVersion);
-    printf("  Minor Version: %d\n", minorVersion);
+        printf("Start Method Detected\n");
+        printf("  Major Version: %d\n", majorVersion);
+        printf("  Minor Version: %d\n", minorVersion);
 
-    // TODO server-properties
-    // https://www.rabbitmq.com/amqp-0-9-1-reference.html#domain.peer-properties
+        // TODO server-properties
+        // https://www.rabbitmq.com/amqp-0-9-1-reference.html#domain.peer-properties
 
-    // Field Tables are long strings that contained packed key-value pairs
-    // Pair:
-    //   name (short string)  short string is 'unsigned short' length + char array of data (0 -> 255 chars)
-    //   value type (byte)
-    //   value (?)
-    tmp += ExtractFieldTable(tmp);
+        // Field Tables are long strings that contained packed key-value pairs
+        // Pair:
+        //   name (short string)  short string is 'unsigned short' length + char array of data (0 -> 255 chars)
+        //   value type (byte)
+        //   value (?)
+        tmp += ExtractFieldTable(tmp);
 
-    // mechanisms (long string)
-    // long string is a 32-bit integer length value + character array
-    struct LongString mechanism, locale;
+        // mechanisms (long string)
+        // long string is a 32-bit integer length value + character array
+        struct LongString mechanism, locale;
 
-    ExtractLongString(&tmp, &mechanism);
-    printf("Mechanism [%d, %s]\n", mechanism.length, mechanism.content);
-    free(mechanism.content);
+        ExtractLongString(&tmp, &mechanism);
+        printf("Mechanism [%d, %s]\n", mechanism.length, mechanism.content);
+        free(mechanism.content);
 
-    ExtractLongString(&tmp, &locale);
-    printf("Locale [%d, %s]\n", locale.length, locale.content);
-    free(locale.content);
+        ExtractLongString(&tmp, &locale);
+        printf("Locale [%d, %s]\n", locale.length, locale.content);
+        free(locale.content);
+    } 
+    else if (classId==10 && methodId == 11)
+    {
+        printf("Start-Ok Method Detected\n");
+        tmp += ExtractFieldTable(tmp);
+
+        struct ShortString mechanism, locale;
+        struct LongString response;
+
+        ExtractShortString(&tmp, &mechanism);
+        printf("Mechanism [%d, %s]\n", mechanism.length, mechanism.content);
+        free(mechanism.content);
+
+        ExtractLongString(&tmp, &response);
+        printf("Mechanism [%d, %s]\n", response.length, response.content);
+        free(mechanism.content);
+
+        ExtractShortString(&tmp, &locale);
+        printf("Locale [%d, %s]\n", locale.length, locale.content);
+        free(locale.content);
+    } 
+    else if (classId == 10 && methodId==30)
+    {
+        printf("Start-Ok Method Detected\n");
+
+    }
 }
 
 // Field Tables are long strings that contained packed key-value pairs
@@ -297,6 +348,9 @@ int ExtractFieldTable(unsigned char* buf)
 {
     unsigned char* tmp = buf;
 
+    for (int i=0;i<10;i++){
+        printf("[%3d] %d\n", i,buf[i]);
+    }
     struct LongString table;
     ExtractLongString(&tmp, &table);
     printf("Field Table length: %d\n", table.length);
@@ -358,7 +412,7 @@ void ExtractShortString(unsigned char** in, struct ShortString* out)
     *in += 1;
 
     // TODO Validate malloc
-    out->content = (char*) malloc(out->length+1);
+    out->content = (char*) calloc(out->length+1, sizeof(char));
 
     memset(out->content, 0, out->length+1);
     memcpy(out->content, *in, out->length);
@@ -374,54 +428,111 @@ void ExtractLongString(unsigned char** in, struct LongString* out)
     *in += 4;
 
     // TODO Validate malloc
-    out->content = (unsigned char*) malloc(out->length+1);
+    out->content = (unsigned char*) calloc(out->length+1, sizeof(unsigned char));
 
     memset(out->content, 0, out->length+1);
     memcpy(out->content, *in, out->length);
     *in += out->length;
 }
 
-
-void BuildStartOkPayload()
+/*
+        unsigned char StartOkMethodFrame[] = {
+            1,
+            0,0,
+            0,0,0,33,
+            0,10,
+            0,11,
+            0, // client properties?
+            5,'P','L','A','I','N', // "PLAIN"
+            0,0,0,12, 0,'g','u','e','s','t',0,'g','u','e','s','t', // in long format: 0,'guest', 0,'guest'
+            5,'e','n','_','U','S', // "en_US"
+            0xCE
+        };
+*/
+// Class ID: 10
+// Method ID: 11
+// Mechanism: "PLAIN"
+// Response: guest/guest
+// Locale: "en_US"
+void BuildStartOkPayload(unsigned char** payload, int* length)
 {
     // class-id
+    int classID = 10;
     // method-id
+    int methodID = 11;
     // client properties
-    char properties[] = {
+    unsigned char properties[] = {
         // long string size
 
         // long string data that contains:
         //  short string key
         // type char
         // short string value
-//8+1+12+
-//8+1+8+
-//9+1+8+
-//12+1+23
-        92,
+
+        // these 4 bytes store the length of the rest of the array
+        0,0,0,104,
         // product 'S', Lee Library
         7,'p','r','o','d','u','c','t',
         'S',
-        11,'L','e','e',' ','L','i','b','r','a','r','y',
+        0,0,0,11,'L','e','e',' ','L','i','b','r','a','r','y',
         // version 'S', unknown
         7,'v','e','r','s','i','o','n',
         'S',
-        7,'u','n','k','n','o','w','n',
+        0,0,0,7,'u','n','k','n','o','w','n',
         // platform 'S', unknown
         8,'p','l','a','t','f','o','r','m',
         'S',
-        7,'u','n','k','n','o','w','n',
+        0,0,0,7,'u','n','k','n','o','w','n',
         // information 'S', http://www.digikey.com
         11,'i','n','f','o','r','m','a','t','i','o','n',
         'S',
-        22,'h','t','t','p',':','/','/','w','w','w','.','d','i','g','i','k','e','y','.','c','o','m'
-
+        0,0,0,22,'h','t','t','p',':','/','/','w','w','w','.','d','i','g','i','k','e','y','.','c','o','m'
     };
     // mechanism (short string)
-    char mechanism[] = {5,'P','L','A','I','N'};
+    unsigned char mechanism[] = {5,'P','L','A','I','N'};
     // response (long string)
-    char response[] = {0,0,0,12, 0,'g','u','e','s','t',0,'g','u','e','s','t'};
+    unsigned char response[] = {0,0,0,12, 0,'g','u','e','s','t',0,'g','u','e','s','t'};
     // locale (short string)
-    char locale[] = {5, 'e','n','_','U','S'};
+    unsigned char locale[] = {5, 'e','n','_','U','S'};
 
+    int fullLength = 4 +sizeof(properties) +sizeof(mechanism) +sizeof(response) +sizeof(locale);
+
+    //printf("Full Length of start-ok is %d\n", fullLength);
+
+    unsigned char* tmp = *payload;
+    tmp = (unsigned char*) calloc(fullLength, sizeof(unsigned char));
+    *length = 0;
+
+    if (tmp != 0)
+    {
+        *payload = tmp;
+        // Class ID
+        *tmp++ = 0;
+        *tmp++ = classID;
+
+        // Method ID
+        *tmp++ = 0;
+        *tmp++ = methodID;
+
+        for(int i=0;i<sizeof(properties);i++){
+            *tmp++ = properties[i];
+        }
+
+        for(int i=0;i<sizeof(mechanism);i++){
+            *tmp++ = mechanism[i];
+        }
+        for(int i=0;i<sizeof(response);i++){
+            *tmp++ = response[i];
+        }
+        for(int i=0;i<sizeof(locale);i++){
+            *tmp++ = locale[i];
+        }
+/*
+        for (int i=0;i<fullLength;i++){
+            printf("%c|", (*payload)[i]);
+        }
+        printf("\n");        
+*/
+        *length = fullLength;
+    }
 }
