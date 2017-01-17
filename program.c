@@ -12,6 +12,7 @@ void ExtractLongString(unsigned char** in, struct LongString* out);
 void BuildStartOkPayload(unsigned char** payload, int* length);
 void BuildTuneOkPayload(unsigned char** payload, int* length);
 void BuildOpenPayload(unsigned char** payload, int* length);
+void BuildOpenChannelPayload(unsigned char** payload, int* length);
 void DumpBuffer(char* name, unsigned char* buffer, int length);
 
 
@@ -204,14 +205,6 @@ int main(int argc, char** argv) {
         }
         free(OpenMethodFrame);
 
-/*
-        unsigned char term[] = {FRAME_TERMINATOR};
-        send(sockfd, term, 1, 0);
-        send(sockfd, term, 1, 0);
-        send(sockfd, term, 1, 0);
-        send(sockfd, term, 1, 0);
-        send(sockfd, term, 1, 0);
-*/
         // listen for data
         printf("Reading the response from Open method frame\n");
         if ( (readLength = recv(sockfd, recvBuff, sizeof(recvBuff)-1, 0)) <= 0)
@@ -221,7 +214,55 @@ int main(int argc, char** argv) {
             return -1;
         }
 
-        // This should be a ? request from the server
+        // This should be a Open-OK request from the server
+        GetGeneralFrameFromBuffer(0L, recvBuff, readLength);
+
+        // Let's open a channel (Channel #1)
+        BuildOpenChannelPayload(&payload, &payloadSize);
+
+        unsigned char* OpenChannelMethodFrame;
+        OpenChannelMethodFrame = (unsigned char*) calloc(payloadSize+8, sizeof(unsigned char));
+        if (OpenChannelMethodFrame==0) {
+            return -1;
+        }
+        printf("Size of OpenChannelMethodFrame: %d\n", payloadSize+8);
+        tmp = OpenChannelMethodFrame;
+        // Frame Type
+        *tmp++ = METHOD_FRAME; // Method Frame Type
+        // Channel 1
+        *tmp++ = 0; // Channel 0, byte 1
+        *tmp++ = 1; // Channel 0, byte 2
+        // Payload Size
+        *tmp++ = (payloadSize >> 24) & 0xFF;
+        *tmp++ = (payloadSize >> 16) & 0xFF;
+        *tmp++ = (payloadSize >> 8) & 0xFF;
+        *tmp++ = payloadSize & 0xFF;
+        // Payload
+        for (int i=0;i<payloadSize;i++){
+            *tmp++ = payload[i];
+        }
+        // Frame Terminator
+        *tmp = FRAME_TERMINATOR;
+
+        free(payload);
+        DumpBuffer("Open", OpenChannelMethodFrame, payloadSize+8);
+        if ((writeLength = send(sockfd, OpenChannelMethodFrame, payloadSize+8, 0)) < 0)
+        {
+            printf("Error writing Open\n");
+            return -1;
+        }
+        free(OpenChannelMethodFrame);
+
+        // listen for data
+        printf("Reading the response from Open channel method frame\n");
+        if ( (readLength = recv(sockfd, recvBuff, sizeof(recvBuff)-1, 0)) <= 0)
+        {
+            // error("ERROR reading from socket");
+            printf("Error reading Open channel response %d\n", readLength);
+            return -1;
+        }
+
+        // This should be a Channel Open-OK request from the server
         GetGeneralFrameFromBuffer(0L, recvBuff, readLength);
 
 /*
@@ -451,7 +492,10 @@ void GetMethodPayloadFromBuffer(unsigned char* buf, int length)
         ExtractShortString(&tmp, &reserved);
         printf("Reserved [%d, %s]\n", reserved.length, reserved.content);
         free(reserved.content);
-
+    }
+    else if (classId==20 && methodId == 11)
+    {
+        printf("Channel Open-OK Method Detected\n");
     }
 
 }
@@ -701,6 +745,41 @@ void BuildOpenPayload(unsigned char** payload, int* length)
         // reserved-1
         0,
         // reserved-2
+        0
+    };
+
+    int fullLength = sizeof(data);
+
+    unsigned char* tmp = *payload;
+    tmp = (unsigned char*) calloc(fullLength, sizeof(unsigned char));
+    *length = 0;
+
+    if (tmp != 0)
+    {
+        *payload = tmp;
+        
+        // class id and method id are baked in this time
+        for(int i=0;i<sizeof(data);i++)
+        {
+            *tmp++ = data[i];
+        }
+
+        *length = fullLength;
+    }
+}
+
+void BuildOpenChannelPayload(unsigned char** payload, int* length)
+{
+    // Channel.Open
+    // classId 20
+    // methodId 10
+
+    unsigned char data[] = {
+        // class id
+        0,20,
+        // method id
+        0,10,
+        // reserved-1
         0
     };
 
