@@ -10,12 +10,19 @@ int ExtractFieldTable(unsigned char*);
 void ExtractShortString(unsigned char** in, struct ShortString* out);
 void ExtractLongString(unsigned char** in, struct LongString* out);
 void BuildStartOkPayload(unsigned char** payload, int* length);
+void BuildTuneOkPayload(unsigned char** payload, int* length);
+void BuildOpenPayload(unsigned char** payload, int* length);
+void DumpBuffer(char* name, unsigned char* buffer, int length);
+
 
 int main(int argc, char** argv) {
 
     unsigned char recvBuff[1024];
     unsigned char buffer[] = {'A', 'M', 'Q', 'P', 0, 0, 9, 1};
     unsigned char* tmp; /* temporary buffer */
+    unsigned char* payload;
+    int payloadSize;
+
     int sockfd = 0;
     int readLength, writeLength;
 
@@ -71,8 +78,6 @@ int main(int argc, char** argv) {
 
         // Now lets send a Connection.Start-OK method frame back
         unsigned char* StartOkMethodFrame;
-        unsigned char* payload;
-        int payloadSize;
         BuildStartOkPayload(&payload, &payloadSize);
 
         printf("Full Length of start-ok payload is %d\n", payloadSize);
@@ -112,18 +117,112 @@ int main(int argc, char** argv) {
             printf("Error writing start-ok\n");
             return -1;
         }
+        free(StartOkMethodFrame);
 
         // listen for data
         printf("Reading the response from start-ok method frame\n");
         if ( (readLength = recv(sockfd, recvBuff, sizeof(recvBuff)-1, 0)) <= 0)
         {
             // error("ERROR reading from socket");
-            printf("Error reading start-ok %d\n", readLength);
+            printf("Error reading start-ok response %d\n", readLength);
             return -1;
         }
 
+        // This should be a Tune request from the server
         GetGeneralFrameFromBuffer(0L, recvBuff, readLength);
 
+        // Now lets send a Tune-OK method frame back to server
+        BuildTuneOkPayload(&payload, &payloadSize);
+
+        unsigned char* TuneOkMethodFrame;
+        TuneOkMethodFrame = (unsigned char*) calloc(payloadSize+8, sizeof(unsigned char));
+        if (TuneOkMethodFrame==0) {
+            return -1;
+        }
+        printf("Size of TuneOkMethodFrame: %d\n", payloadSize+8);
+        tmp = TuneOkMethodFrame;
+        // Frame Type
+        *tmp++ = METHOD_FRAME; // Method Frame Type
+        // Channel
+        *tmp++ = 0; // Channel 0, byte 1
+        *tmp++ = 0; // Channel 0, byte 2
+        // Payload Size
+        *tmp++ = (payloadSize >> 24) & 0xFF;
+        *tmp++ = (payloadSize >> 16) & 0xFF;
+        *tmp++ = (payloadSize >> 8) & 0xFF;
+        *tmp++ = payloadSize & 0xFF;
+        // Payload
+        for (int i=0;i<payloadSize;i++){
+            *tmp++ = payload[i];
+        }
+        // Frame Terminator
+        *tmp = FRAME_TERMINATOR;
+
+        free(payload);
+
+        DumpBuffer("TuneOk", TuneOkMethodFrame, payloadSize+8);
+        if ((writeLength = send(sockfd, TuneOkMethodFrame, payloadSize+8, 0)) < 0)
+        {
+            printf("Error writing tune-ok\n");
+            return -1;
+        }
+        free(TuneOkMethodFrame);
+
+// Send an Open call
+        BuildOpenPayload(&payload, &payloadSize);
+
+        unsigned char* OpenMethodFrame;
+        OpenMethodFrame = (unsigned char*) calloc(payloadSize+8, sizeof(unsigned char));
+        if (OpenMethodFrame==0) {
+            return -1;
+        }
+        printf("Size of OpenMethodFrame: %d\n", payloadSize+8);
+        tmp = OpenMethodFrame;
+        // Frame Type
+        *tmp++ = METHOD_FRAME; // Method Frame Type
+        // Channel
+        *tmp++ = 0; // Channel 0, byte 1
+        *tmp++ = 0; // Channel 0, byte 2
+        // Payload Size
+        *tmp++ = (payloadSize >> 24) & 0xFF;
+        *tmp++ = (payloadSize >> 16) & 0xFF;
+        *tmp++ = (payloadSize >> 8) & 0xFF;
+        *tmp++ = payloadSize & 0xFF;
+        // Payload
+        for (int i=0;i<payloadSize;i++){
+            *tmp++ = payload[i];
+        }
+        // Frame Terminator
+        *tmp = FRAME_TERMINATOR;
+
+        free(payload);
+        DumpBuffer("Open", OpenMethodFrame, payloadSize+8);
+        if ((writeLength = send(sockfd, OpenMethodFrame, payloadSize+8, 0)) < 0)
+        {
+            printf("Error writing Open\n");
+            return -1;
+        }
+        free(OpenMethodFrame);
+
+/*
+        unsigned char term[] = {FRAME_TERMINATOR};
+        send(sockfd, term, 1, 0);
+        send(sockfd, term, 1, 0);
+        send(sockfd, term, 1, 0);
+        send(sockfd, term, 1, 0);
+        send(sockfd, term, 1, 0);
+*/
+        // listen for data
+        printf("Reading the response from Open method frame\n");
+        if ( (readLength = recv(sockfd, recvBuff, sizeof(recvBuff)-1, 0)) <= 0)
+        {
+            // error("ERROR reading from socket");
+            printf("Error reading Open  response %d\n", readLength);
+            return -1;
+        }
+
+        // This should be a ? request from the server
+        GetGeneralFrameFromBuffer(0L, recvBuff, readLength);
 
 /*
         printf("Waiting for response from start-ok\n");
@@ -142,6 +241,7 @@ int main(int argc, char** argv) {
 */
         printf("Done reading\n");
 
+sleep(4);
         // Shutdown our connection
         if (shutdown(sockfd, STOP_RECV_TRANS) < 0)
         {
@@ -265,12 +365,7 @@ void GetMethodPayloadFromBuffer(unsigned char* buf, int length)
 
     unsigned short classId;
     unsigned short methodId;
-/*
-    for (int i = 0;i<10;i++)
-    {
-        printf("Byte[%d]: %d\n", i, buf[i]);
-    }
-*/
+
     classId = BytesToShort(tmp);
     tmp += sizeof(unsigned short);
 
@@ -334,9 +429,31 @@ void GetMethodPayloadFromBuffer(unsigned char* buf, int length)
     } 
     else if (classId == 10 && methodId==30)
     {
-        printf("Start-Ok Method Detected\n");
+        printf("Tune Method Detected\n");
+        unsigned short channelMax;
+        unsigned int frameMax;
+        unsigned short heartbeat; 
+
+        channelMax = BytesToShort(tmp);
+        tmp += sizeof(unsigned short);
+        frameMax = BytesToInt(tmp);
+        tmp += 4;
+        heartbeat = BytesToShort(tmp);
+        tmp += sizeof(unsigned short);
+        printf("Max Channels: %d\n", channelMax);
+        printf("Max Frames: %d\n", frameMax);
+        printf("Heartbeat interval: %d\n", heartbeat);
+    }
+    else if (classId == 10 && methodId==41)
+    {
+        printf("Open-OK Method Detected\n");
+        struct ShortString reserved;
+        ExtractShortString(&tmp, &reserved);
+        printf("Reserved [%d, %s]\n", reserved.length, reserved.content);
+        free(reserved.content);
 
     }
+
 }
 
 // Field Tables are long strings that contained packed key-value pairs
@@ -435,20 +552,6 @@ void ExtractLongString(unsigned char** in, struct LongString* out)
     *in += out->length;
 }
 
-/*
-        unsigned char StartOkMethodFrame[] = {
-            1,
-            0,0,
-            0,0,0,33,
-            0,10,
-            0,11,
-            0, // client properties?
-            5,'P','L','A','I','N', // "PLAIN"
-            0,0,0,12, 0,'g','u','e','s','t',0,'g','u','e','s','t', // in long format: 0,'guest', 0,'guest'
-            5,'e','n','_','U','S', // "en_US"
-            0xCE
-        };
-*/
 // Class ID: 10
 // Method ID: 11
 // Mechanism: "PLAIN"
@@ -497,8 +600,6 @@ void BuildStartOkPayload(unsigned char** payload, int* length)
 
     int fullLength = 4 +sizeof(properties) +sizeof(mechanism) +sizeof(response) +sizeof(locale);
 
-    //printf("Full Length of start-ok is %d\n", fullLength);
-
     unsigned char* tmp = *payload;
     tmp = (unsigned char*) calloc(fullLength, sizeof(unsigned char));
     *length = 0;
@@ -527,12 +628,108 @@ void BuildStartOkPayload(unsigned char** payload, int* length)
         for(int i=0;i<sizeof(locale);i++){
             *tmp++ = locale[i];
         }
-/*
-        for (int i=0;i<fullLength;i++){
-            printf("%c|", (*payload)[i]);
-        }
-        printf("\n");        
-*/
+
         *length = fullLength;
+    }
+}
+
+void BuildTuneOkPayload(unsigned char** payload, int* length)
+{
+    // Tune OK
+    // classId 10
+    // methodId 31
+    // channel max (short)
+    // frame max (int)
+    // heartbeat interval (short)
+
+    // Zero values mean "do not want" or "do not care"
+    // We don't care here so zeroes for everything!
+
+    unsigned char tuneOkData[] = {
+        // class id
+        0,10,
+        // method id
+        0,31,
+        // channel max (0)
+        0,0,
+        // frame max (4096 bytes, seems to be the min for my local rabbit)
+        0,0,16,0,
+        // heartbeat (0)
+        0,60
+    };
+
+    int fullLength = sizeof(tuneOkData);
+
+    unsigned char* tmp = *payload;
+    tmp = (unsigned char*) calloc(fullLength, sizeof(unsigned char));
+    *length = 0;
+
+    if (tmp != 0)
+    {
+        *payload = tmp;
+        
+        // class id and method id are baked in this time
+        for(int i=0;i<sizeof(tuneOkData);i++)
+        {
+            *tmp++ = tuneOkData[i];
+        }
+
+        *length = fullLength;
+    }
+}
+
+
+void BuildOpenPayload(unsigned char** payload, int* length)
+{
+    // Open
+    // classId 10
+    // methodId 31
+    // channel max (short)
+    // frame max (int)
+    // heartbeat interval (short)
+
+    // Zero values mean "do not want" or "do not care"
+    // We don't care here so zeroes for everything!
+
+    unsigned char data[] = {
+        // class id
+        0,10,
+        // method id
+        0,40,
+        // virtual host
+        1,'/',
+        // reserved-1
+        0,
+        // reserved-2
+        0
+    };
+
+    int fullLength = sizeof(data);
+
+    unsigned char* tmp = *payload;
+    tmp = (unsigned char*) calloc(fullLength, sizeof(unsigned char));
+    *length = 0;
+
+    if (tmp != 0)
+    {
+        *payload = tmp;
+        
+        // class id and method id are baked in this time
+        for(int i=0;i<sizeof(data);i++)
+        {
+            *tmp++ = data[i];
+        }
+
+        *length = fullLength;
+    }
+}
+
+///
+// For dumping buffer contents to stdout
+///
+void DumpBuffer(char* name, unsigned char* buffer, int length)
+{
+    for (int i=0;i<length;i++){
+        printf("%s[%3d]: %x\n", name, i, buffer[i]);
     }
 }
