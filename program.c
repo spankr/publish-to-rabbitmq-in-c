@@ -13,6 +13,10 @@ void BuildStartOkPayload(unsigned char** payload, int* length);
 void BuildTuneOkPayload(unsigned char** payload, int* length);
 void BuildOpenPayload(unsigned char** payload, int* length);
 void BuildOpenChannelPayload(unsigned char** payload, int* length);
+
+void BuildPublishPayload(unsigned char** payload, int* length);
+void BuildPublishContentHeaderPayload(unsigned char** payload, int* length, int totalBodySize);
+void BuildPublishContentBodyPayload(unsigned char** payload, int* length);
 void DumpBuffer(char* name, unsigned char* buffer, int length);
 
 
@@ -265,21 +269,112 @@ int main(int argc, char** argv) {
         // This should be a Channel Open-OK request from the server
         GetGeneralFrameFromBuffer(0L, recvBuff, readLength);
 
-/*
-        printf("Waiting for response from start-ok\n");
-        while ( (readLength = recv(sockfd, recvBuff, sizeof(recvBuff)-1, 0)) > 0)
+        // Now that we have channel #1 open, let's try to publish something. Maybe "Hello, there!"
+        // We need:
+        //  Basic.Publish Method FRAME
+        //  A content header frame?
+        //  A content body frame
+
+        unsigned char* PublishMethodFrame;
+        unsigned char* PublishContentHeaderFrame;
+        unsigned char* PublishContentBodyFrame;
+
+        int publishMethodSize;
+        int publishContentHeaderSize;
+        int publishContentBodySize;
+        BuildPublishPayload(&payload, &publishMethodSize);
+        PublishMethodFrame = (unsigned char*) calloc(publishMethodSize+8, sizeof(unsigned char));
+        if (PublishMethodFrame==0) {
+            return -1;
+        }
+        printf("Size of PublishMethodFrame: %d\n", publishMethodSize+8);
+        tmp = PublishMethodFrame;
+        // Frame Type
+        *tmp++ = METHOD_FRAME;
+        // Channel 1
+        *tmp++ = 0; // Channel 0, byte 1
+        *tmp++ = 1; // Channel 0, byte 2
+        // Payload Size
+        *tmp++ = (publishMethodSize >> 24) & 0xFF;
+        *tmp++ = (publishMethodSize >> 16) & 0xFF;
+        *tmp++ = (publishMethodSize >> 8) & 0xFF;
+        *tmp++ = publishMethodSize & 0xFF;
+        // Payload
+        for (int i=0;i<publishMethodSize;i++){
+            *tmp++ = payload[i];
+        }
+        *tmp = FRAME_TERMINATOR;
+        free(payload);
+
+        BuildPublishContentBodyPayload(&payload, &publishContentBodySize);
+        PublishContentBodyFrame = (unsigned char*) calloc(publishContentBodySize+8, sizeof(unsigned char));
+        if (PublishContentBodyFrame==0) {
+            return -1;
+        }
+        printf("Size of PublishContentBodyFrame: %d\n", publishContentBodySize+8);
+        tmp = PublishContentBodyFrame;
+        // Frame Type
+        *tmp++ = BODY_FRAME;
+        // Channel 1
+        *tmp++ = 0; // Channel 0, byte 1
+        *tmp++ = 1; // Channel 0, byte 2
+        // Payload Size
+        *tmp++ = (publishContentBodySize >> 24) & 0xFF;
+        *tmp++ = (publishContentBodySize >> 16) & 0xFF;
+        *tmp++ = (publishContentBodySize >> 8) & 0xFF;
+        *tmp++ = publishContentBodySize & 0xFF;
+        // Payload
+        for (int i=0;i<publishContentBodySize;i++){
+            *tmp++ = payload[i];
+        }
+        *tmp = FRAME_TERMINATOR;
+        free(payload);
+
+        BuildPublishContentHeaderPayload(&payload, &publishContentHeaderSize, publishContentBodySize);
+        PublishContentHeaderFrame = (unsigned char*) calloc(publishContentHeaderSize+8, sizeof(unsigned char));
+        if (PublishContentHeaderFrame==0) {
+            return -1;
+        }
+        printf("Size of PublishContentHeaderFrame: %d\n", publishContentHeaderSize+8);
+        tmp = PublishContentHeaderFrame;
+        // Frame Type
+        *tmp++ = HEADER_FRAME;
+        // Channel 1
+        *tmp++ = 0; // Channel 0, byte 1
+        *tmp++ = 1; // Channel 0, byte 2
+        // Payload Size
+        *tmp++ = (publishContentHeaderSize >> 24) & 0xFF;
+        *tmp++ = (publishContentHeaderSize >> 16) & 0xFF;
+        *tmp++ = (publishContentHeaderSize >> 8) & 0xFF;
+        *tmp++ = publishContentHeaderSize & 0xFF;
+        // Payload
+        for (int i=0;i<publishContentHeaderSize;i++){
+            *tmp++ = payload[i];
+        }
+        *tmp = FRAME_TERMINATOR;
+        free(payload);
+        
+        if ((writeLength = send(sockfd, PublishMethodFrame, publishMethodSize+8, 0)) < 0)
         {
-            printf("Read %d bytes\n", readLength);
+            printf("Error writing Publish Method\n");
+            return -1;
+        }
+        free(PublishMethodFrame);
 
-            for (int i = 0;i<35;i++)
-            {
-                printf("Byte[%d]: %d\n", i, recvBuff[i]);
-            }
-//            printf("%s\n", recvBuff);
+        if ((writeLength = send(sockfd, PublishContentHeaderFrame, publishContentHeaderSize+8, 0)) < 0)
+        {
+            printf("Error writing Publish header\n");
+            return -1;
+        }
+        free(PublishContentHeaderFrame);
 
-            GetGeneralFrameFromBuffer(0L, recvBuff, readLength);
-        } 
-*/
+        if ((writeLength = send(sockfd, PublishContentBodyFrame, publishContentBodySize+8, 0)) < 0)
+        {
+            printf("Error writing Publish content\n");
+            return -1;
+        }
+        free(PublishContentBodyFrame);
+
         printf("Done reading\n");
 
 sleep(4);
@@ -803,12 +898,146 @@ void BuildOpenChannelPayload(unsigned char** payload, int* length)
     }
 }
 
+void BuildPublishPayload(unsigned char** payload, int* length)
+{
+    // Basic.Publish
+    // classId 60
+    // methodId 40
+
+    unsigned char data[] = {
+        // class id
+        0,60,
+        // method id
+        0,40,
+        // reserved-1 (short)
+        0,
+        // exchange
+        1,0,
+        // routing key/queue name (short string)
+        10,'l','e','e','.','t','e','s','t','.','q',
+        // mandatory (bit)
+        // immediate (bit)
+        0
+    };
+
+    DumpBuffer("Publish", data, sizeof(data));
+
+    int fullLength = sizeof(data);
+
+    unsigned char* tmp = *payload;
+    tmp = (unsigned char*) calloc(fullLength, sizeof(unsigned char));
+    *length = 0;
+
+    if (tmp != 0)
+    {
+        *payload = tmp;
+        
+        // class id and method id are baked in this time
+        for(int i=0;i<sizeof(data);i++)
+        {
+            *tmp++ = data[i];
+        }
+
+        *length = fullLength;
+    }
+}
+
+/*
+    0          2        4           12               14
+    +----------+--------+-----------+----------------+------------- - -
+    | class-id | weight | body size | property flags | property list...
+    +----------+--------+-----------+----------------+------------- - -
+    short       short    long long   short            remainder...
+*/
+void BuildPublishContentHeaderPayload(unsigned char** payload, int* length, int totalBodySize)
+{
+    // Basic.Publish
+    // classId 60
+    // methodId 40
+
+    unsigned char data[] = {
+        // class id
+        0,60,
+        // weight (must be zero)
+        0,0,
+        // body size (64-bit total size of content body frames). We are sending tiny data so we can use lower 4 bits
+        0,0,0,0,
+        // 0,0,0,0,
+        (totalBodySize >> 24) & 0xFF,
+        (totalBodySize >> 16) & 0xFF,
+        (totalBodySize >> 8) & 0xFF,
+        totalBodySize & 0xFF,
+
+        // property flags
+        0,0
+        // property list
+    };
+
+    printf("Publishing %d bytes of content\n", totalBodySize);
+
+    int fullLength = sizeof(data);
+
+    unsigned char* tmp = *payload;
+    tmp = (unsigned char*) calloc(fullLength, sizeof(unsigned char));
+    *length = 0;
+
+    if (tmp != 0)
+    {
+        *payload = tmp;
+        
+        // class id and method id are baked in this time
+        for(int i=0;i<sizeof(data);i++)
+        {
+            *tmp++ = data[i];
+        }
+
+        *length = fullLength;
+    }
+}
+
+/*
+    +-----------------------+ +-----------+
+    | Opaque binary payload | | frame-end |
+    +-----------------------+ +-----------+
+*/
+void BuildPublishContentBodyPayload(unsigned char** payload, int* length)
+{
+    // This cannot exceed the maximum frame length we agree upon with the server.
+    // If you look at the Tune-OK payload, I set it to 4096 [see: BuildTuneOkPayload()]
+
+    unsigned char data[] = {
+        // Our message. In this case, "Hello, there!"
+        'H','e','l','l','o',',',' ','t','h','e','r','e','!',
+        // The Frame-End Terminator
+        FRAME_TERMINATOR
+    };
+
+    int fullLength = sizeof(data);
+
+    unsigned char* tmp = *payload;
+    tmp = (unsigned char*) calloc(fullLength, sizeof(unsigned char));
+    *length = 0;
+
+    if (tmp != 0)
+    {
+        *payload = tmp;
+        
+        // class id and method id are baked in this time
+        for(int i=0;i<sizeof(data);i++)
+        {
+            *tmp++ = data[i];
+        }
+
+        *length = fullLength;
+    }
+}
+
 ///
 // For dumping buffer contents to stdout
 ///
 void DumpBuffer(char* name, unsigned char* buffer, int length)
 {
     for (int i=0;i<length;i++){
-        printf("%s[%3d]: %x\n", name, i, buffer[i]);
+        printf("%s[%3d]: %d\n", name, i, buffer[i]);
     }
 }
