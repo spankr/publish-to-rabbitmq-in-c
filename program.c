@@ -954,7 +954,15 @@ void BuildPublishContentHeaderPayload(unsigned char** payload, int* length, int 
     // Basic.Publish
     // classId 60
     // methodId 40
-
+/*
+The property flags are an array of bits that indicate the presence or absence of each property value in
+sequence. The bits are ordered from most high to low - bit 15 indicates the first property. Bit 0 is the last bit
+The property flags can specify more than 16 properties. If the last bit (0) is set, this indicates that a
+further property flags field follows. There are many property flags fields as needed.
+*/
+    unsigned short CONTENT_TYPE = 0x8000;
+    unsigned short CONTENT_ENCODING = 0x4000;
+    unsigned short propertyFlags = CONTENT_ENCODING;
     unsigned char data[] = {
         // class id
         0,60,
@@ -962,15 +970,19 @@ void BuildPublishContentHeaderPayload(unsigned char** payload, int* length, int 
         0,0,
         // body size (64-bit total size of content body frames). We are sending tiny data so we can use lower 4 bits
         0,0,0,0,
-        // 0,0,0,0,
+        //0,0,0,1,
         (totalBodySize >> 24) & 0xFF,
         (totalBodySize >> 16) & 0xFF,
         (totalBodySize >> 8) & 0xFF,
         totalBodySize & 0xFF,
 
         // property flags
-        0,0
+        (propertyFlags >> 8) & 0xFF,
+        propertyFlags & 0xFF,
         // property list
+        //10,'t','e','x','t','/','p','l','a','i','n'
+        //16,'a','p','p','l','i','c','a','t','i','o','n','/','j','s','o','n'
+        4,'u','t','f','8'
     };
 
     printf("Publishing %d bytes of content\n", totalBodySize);
@@ -1007,9 +1019,11 @@ void BuildPublishContentBodyPayload(unsigned char** payload, int* length)
 
     unsigned char data[] = {
         // Our message. In this case, "Hello, there!"
+        //0xA1,0x1E,
+        //63,
         'H','e','l','l','o',',',' ','t','h','e','r','e','!',
         // The Frame-End Terminator
-        FRAME_TERMINATOR
+        //FRAME_TERMINATOR
     };
 
     int fullLength = sizeof(data);
