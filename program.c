@@ -12,6 +12,7 @@ void ExtractLongString(unsigned char** in, struct LongString* out);
 void BuildStartOkPayload(unsigned char** payload, int* length);
 void BuildTuneOkPayload(unsigned char** payload, int* length);
 void BuildOpenPayload(unsigned char** payload, int* length);
+void BuildClosePayload(unsigned char** payload, int* length);
 void BuildOpenChannelPayload(unsigned char** payload, int* length);
 
 void BuildPublishPayload(unsigned char** payload, int* length);
@@ -335,6 +336,40 @@ int main(int argc, char** argv) {
             return -1;
         }
         free(PublishContentBodyFrame);
+
+        // Let's close our connection
+        BuildClosePayload(&payload, &payloadSize);
+        unsigned char* CloseMethodFrame;
+        CloseMethodFrame = (unsigned char*) calloc(payloadSize+8, sizeof(unsigned char));
+        if (CloseMethodFrame==0) {
+            return -1;
+        }
+        printf("Size of CloseMethodFrame: %d\n", payloadSize+8);
+        tmp = CloseMethodFrame;
+        // Frame Type
+        *tmp++ = METHOD_FRAME;
+        // Channel
+        *tmp++ = 0; // Channel 0, byte 1
+        *tmp++ = 0; // Channel 0, byte 2
+        // Payload Size
+        *tmp++ = (payloadSize >> 24) & 0xFF;
+        *tmp++ = (payloadSize >> 16) & 0xFF;
+        *tmp++ = (payloadSize >> 8) & 0xFF;
+        *tmp++ = payloadSize & 0xFF;
+        // Payload
+        for (int i=0;i<payloadSize;i++){
+            *tmp++ = payload[i];
+        }
+
+        *tmp = FRAME_TERMINATOR;
+        free(payload);
+
+        if ((writeLength = send(sockfd, CloseMethodFrame, payloadSize+8, 0)) < 0)
+        {
+            printf("Error writing Open\n");
+            return -1;
+        }
+        free(CloseMethodFrame);
 
         printf("Done reading\n");
 
@@ -771,6 +806,51 @@ void BuildOpenPayload(unsigned char** payload, int* length)
         0,
         // reserved-2
         0
+    };
+
+    int fullLength = sizeof(data);
+
+    unsigned char* tmp = *payload;
+    tmp = (unsigned char*) calloc(fullLength, sizeof(unsigned char));
+    *length = 0;
+
+    if (tmp != 0)
+    {
+        *payload = tmp;
+        
+        // class id and method id are baked in this time
+        for(int i=0;i<sizeof(data);i++)
+        {
+            *tmp++ = data[i];
+        }
+
+        *length = fullLength;
+    }
+}
+
+void BuildClosePayload(unsigned char** payload, int* length)
+{
+    // Close
+    // classId 10
+    // methodId 50
+    // reply-code
+    // reply-text
+    // failing class id (none, as we're doing this on purpose)
+    // failing method id (none, for same reason)
+
+    unsigned char data[] = {
+        // class id
+        0,10,
+        // method id
+        0,50,
+        // reply-code (short)
+        0,0,
+        // reply-text (short string)
+        7,'c','l','o','s','i','n','g',
+        // failing class id (short)
+        0,0,
+        // failing method id (short)
+        0,0
     };
 
     int fullLength = sizeof(data);
