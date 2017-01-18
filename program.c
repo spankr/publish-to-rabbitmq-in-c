@@ -1,10 +1,10 @@
 #include "program.h"
 
+#define SERVER_NAME "127.0.0.1"
 #define SERVER_PORT 5672
 #define STOP_RECV_TRANS 2
 
-unsigned char* GeneralFrameToBuffer(struct General_Frame*);
-void GetGeneralFrameFromBuffer(struct General_Frame*, unsigned char*, int);
+void GetGeneralFrameFromBuffer(unsigned char*, int);
 void GetMethodPayloadFromBuffer(unsigned char*, int);
 int ExtractFieldTable(unsigned char*);
 void ExtractShortString(unsigned char** in, struct ShortString* out);
@@ -23,7 +23,7 @@ void DumpBuffer(char* name, unsigned char* buffer, int length);
 int main(int argc, char** argv) {
 
     unsigned char recvBuff[1024];
-    unsigned char buffer[] = {'A', 'M', 'Q', 'P', 0, 0, 9, 1};
+    unsigned char ProtocolBuffer[] = {'A', 'M', 'Q', 'P', 0, 0, 9, 1};
     unsigned char* tmp; /* temporary buffer */
     unsigned char* payload;
     int payloadSize;
@@ -31,61 +31,32 @@ int main(int argc, char** argv) {
     int sockfd = 0;
     int readLength, writeLength;
 
-    struct General_Frame frm = { 
-        METHOD_FRAME,
-        0,
-        5,
-        NULL,
-        0xCE
-    };
-
-    printf("Hello World\n");
-/*
-    char* buf = GeneralFrameToBuffer(&frm);
-    for (int i=0;i<13;i++)
-    {
-        printf("0x%x:%c\n", buf[i], buf[i]);
-    }
-    free(buf);
-    return 0;
-*/
     // We will need to open a socket.
-    if (initClientSocket(&sockfd, "127.0.0.1", SERVER_PORT) >= 0)
+    if (initClientSocket(&sockfd, SERVER_NAME, SERVER_PORT) >= 0)
     {
         printf("Good connection!\n");
-        // then probably a login
-        // localhost 5671 guest/guest
 
-        // send some data
-        printf("Writing: [%s](%lu)\n", buffer, sizeof(buffer));
-        if ((writeLength = send(sockfd, buffer, sizeof(buffer), 0)) < 0)
+        // Let's start the handshake with the server
+        if ((writeLength = send(sockfd, ProtocolBuffer, sizeof(ProtocolBuffer), 0)) < 0)
         {
-            // error("ERROR writing to socket");
+            printf("Error trying to send the protocol buffer to RabbitMQ server\n");
             return -1;
         }
-/*
-        printf("Sending a START\n");
-        if ((writeLength = send(sockfd, "start", 5, 0)) < 0)
-        {
-            // error("ERROR writing to socket");
-            return -1;
-        }
-*/
+
         // listen for data
         printf("Read the Connection.Start method frame\n");
         if ( (readLength = recv(sockfd, recvBuff, sizeof(recvBuff)-1, 0)) <= 0)
         {
-            // error("ERROR reading from socket");
+            printf("Unable to read the Start method frame from RabbitMQ\n");
             return -1;
         }
 
-        GetGeneralFrameFromBuffer(0L, recvBuff, readLength);
+        // This will parse our frame so we can see how it looks
+        GetGeneralFrameFromBuffer(recvBuff, readLength);
 
         // Now lets send a Connection.Start-OK method frame back
         unsigned char* StartOkMethodFrame;
         BuildStartOkPayload(&payload, &payloadSize);
-
-        printf("Full Length of start-ok payload is %d\n", payloadSize);
 
         StartOkMethodFrame = (unsigned char*) calloc(payloadSize+8, sizeof(unsigned char));
         if (StartOkMethodFrame==0) {
@@ -113,12 +84,9 @@ int main(int argc, char** argv) {
 
         free(payload);
 
-        // Dump our Start-Ok method frame to make sure we did it right
-        GetGeneralFrameFromBuffer(0L, StartOkMethodFrame, payloadSize+8);
-
+        // Send our Start-OK to the server
         if ((writeLength = send(sockfd, StartOkMethodFrame, payloadSize+8, 0)) < 0)
         {
-            // error("ERROR writing to socket");
             printf("Error writing start-ok\n");
             return -1;
         }
@@ -134,7 +102,7 @@ int main(int argc, char** argv) {
         }
 
         // This should be a Tune request from the server
-        GetGeneralFrameFromBuffer(0L, recvBuff, readLength);
+        //GetGeneralFrameFromBuffer(recvBuff, readLength);
 
         // Now lets send a Tune-OK method frame back to server
         BuildTuneOkPayload(&payload, &payloadSize);
@@ -147,7 +115,7 @@ int main(int argc, char** argv) {
         printf("Size of TuneOkMethodFrame: %d\n", payloadSize+8);
         tmp = TuneOkMethodFrame;
         // Frame Type
-        *tmp++ = METHOD_FRAME; // Method Frame Type
+        *tmp++ = METHOD_FRAME;
         // Channel
         *tmp++ = 0; // Channel 0, byte 1
         *tmp++ = 0; // Channel 0, byte 2
@@ -160,12 +128,10 @@ int main(int argc, char** argv) {
         for (int i=0;i<payloadSize;i++){
             *tmp++ = payload[i];
         }
-        // Frame Terminator
-        *tmp = FRAME_TERMINATOR;
 
+        *tmp = FRAME_TERMINATOR;
         free(payload);
 
-        DumpBuffer("TuneOk", TuneOkMethodFrame, payloadSize+8);
         if ((writeLength = send(sockfd, TuneOkMethodFrame, payloadSize+8, 0)) < 0)
         {
             printf("Error writing tune-ok\n");
@@ -173,7 +139,7 @@ int main(int argc, char** argv) {
         }
         free(TuneOkMethodFrame);
 
-// Send an Open call
+        // Send an Open call
         BuildOpenPayload(&payload, &payloadSize);
 
         unsigned char* OpenMethodFrame;
@@ -184,7 +150,7 @@ int main(int argc, char** argv) {
         printf("Size of OpenMethodFrame: %d\n", payloadSize+8);
         tmp = OpenMethodFrame;
         // Frame Type
-        *tmp++ = METHOD_FRAME; // Method Frame Type
+        *tmp++ = METHOD_FRAME;
         // Channel
         *tmp++ = 0; // Channel 0, byte 1
         *tmp++ = 0; // Channel 0, byte 2
@@ -197,11 +163,10 @@ int main(int argc, char** argv) {
         for (int i=0;i<payloadSize;i++){
             *tmp++ = payload[i];
         }
-        // Frame Terminator
-        *tmp = FRAME_TERMINATOR;
 
+        *tmp = FRAME_TERMINATOR;
         free(payload);
-        DumpBuffer("Open", OpenMethodFrame, payloadSize+8);
+
         if ((writeLength = send(sockfd, OpenMethodFrame, payloadSize+8, 0)) < 0)
         {
             printf("Error writing Open\n");
@@ -213,13 +178,12 @@ int main(int argc, char** argv) {
         printf("Reading the response from Open method frame\n");
         if ( (readLength = recv(sockfd, recvBuff, sizeof(recvBuff)-1, 0)) <= 0)
         {
-            // error("ERROR reading from socket");
             printf("Error reading Open  response %d\n", readLength);
             return -1;
         }
 
         // This should be a Open-OK request from the server
-        GetGeneralFrameFromBuffer(0L, recvBuff, readLength);
+        //GetGeneralFrameFromBuffer(recvBuff, readLength);
 
         // Let's open a channel (Channel #1)
         BuildOpenChannelPayload(&payload, &payloadSize);
@@ -232,10 +196,10 @@ int main(int argc, char** argv) {
         printf("Size of OpenChannelMethodFrame: %d\n", payloadSize+8);
         tmp = OpenChannelMethodFrame;
         // Frame Type
-        *tmp++ = METHOD_FRAME; // Method Frame Type
+        *tmp++ = METHOD_FRAME;
         // Channel 1
-        *tmp++ = 0; // Channel 0, byte 1
-        *tmp++ = 1; // Channel 0, byte 2
+        *tmp++ = 0; // Channel 1, byte 1
+        *tmp++ = 1; // Channel 1, byte 2
         // Payload Size
         *tmp++ = (payloadSize >> 24) & 0xFF;
         *tmp++ = (payloadSize >> 16) & 0xFF;
@@ -245,11 +209,10 @@ int main(int argc, char** argv) {
         for (int i=0;i<payloadSize;i++){
             *tmp++ = payload[i];
         }
-        // Frame Terminator
-        *tmp = FRAME_TERMINATOR;
 
+        *tmp = FRAME_TERMINATOR;
         free(payload);
-        DumpBuffer("Open", OpenChannelMethodFrame, payloadSize+8);
+
         if ((writeLength = send(sockfd, OpenChannelMethodFrame, payloadSize+8, 0)) < 0)
         {
             printf("Error writing Open\n");
@@ -258,21 +221,19 @@ int main(int argc, char** argv) {
         free(OpenChannelMethodFrame);
 
         // listen for data
-        printf("Reading the response from Open channel method frame\n");
         if ( (readLength = recv(sockfd, recvBuff, sizeof(recvBuff)-1, 0)) <= 0)
         {
-            // error("ERROR reading from socket");
             printf("Error reading Open channel response %d\n", readLength);
             return -1;
         }
 
         // This should be a Channel Open-OK request from the server
-        GetGeneralFrameFromBuffer(0L, recvBuff, readLength);
+        //GetGeneralFrameFromBuffer(recvBuff, readLength);
 
         // Now that we have channel #1 open, let's try to publish something. Maybe "Hello, there!"
         // We need:
         //  Basic.Publish Method FRAME
-        //  A content header frame?
+        //  A content header frame
         //  A content body frame
 
         unsigned char* PublishMethodFrame;
@@ -292,8 +253,8 @@ int main(int argc, char** argv) {
         // Frame Type
         *tmp++ = METHOD_FRAME;
         // Channel 1
-        *tmp++ = 0; // Channel 0, byte 1
-        *tmp++ = 1; // Channel 0, byte 2
+        *tmp++ = 0; // Channel 1, byte 1
+        *tmp++ = 1; // Channel 1, byte 2
         // Payload Size
         *tmp++ = (publishMethodSize >> 24) & 0xFF;
         *tmp++ = (publishMethodSize >> 16) & 0xFF;
@@ -316,8 +277,8 @@ int main(int argc, char** argv) {
         // Frame Type
         *tmp++ = BODY_FRAME;
         // Channel 1
-        *tmp++ = 0; // Channel 0, byte 1
-        *tmp++ = 1; // Channel 0, byte 2
+        *tmp++ = 0; // Channel 1, byte 1
+        *tmp++ = 1; // Channel 1, byte 2
         // Payload Size
         *tmp++ = (publishContentBodySize >> 24) & 0xFF;
         *tmp++ = (publishContentBodySize >> 16) & 0xFF;
@@ -340,8 +301,8 @@ int main(int argc, char** argv) {
         // Frame Type
         *tmp++ = HEADER_FRAME;
         // Channel 1
-        *tmp++ = 0; // Channel 0, byte 1
-        *tmp++ = 1; // Channel 0, byte 2
+        *tmp++ = 0; // Channel 1, byte 1
+        *tmp++ = 1; // Channel 1, byte 2
         // Payload Size
         *tmp++ = (publishContentHeaderSize >> 24) & 0xFF;
         *tmp++ = (publishContentHeaderSize >> 16) & 0xFF;
@@ -377,7 +338,8 @@ int main(int argc, char** argv) {
 
         printf("Done reading\n");
 
-sleep(4);
+        // I want to sleep a little before I shutdown the socket
+        sleep(4);
         // Shutdown our connection
         if (shutdown(sockfd, STOP_RECV_TRANS) < 0)
         {
@@ -428,39 +390,7 @@ int initClientSocket(int * sock, const char * server_ip, int port)
 	return 0;
 }
 
-unsigned char* GeneralFrameToBuffer(struct General_Frame* frame)
-{
-    int payloadSize = frame->size;
-    int bufSize = sizeof(frame->type) + sizeof(frame->channel) + sizeof(frame->size) + payloadSize + sizeof(frame->end);
-
-    unsigned char* buf = (unsigned char*) malloc(bufSize);
-    unsigned char *tmp = buf;
-
-    if (buf == NULL)
-    {
-        printf("Unable to allocate buffer space for General Frame\n");
-    } 
-    else 
-    {
-        *tmp++ = frame->type;
-
-        *tmp = frame->channel;
-        tmp += sizeof(frame->channel);
-
-        *tmp = frame->size;
-        tmp += sizeof(frame->size);
-
-        memcpy(tmp, frame->payload, frame->size);
-        tmp += frame->size;
-
-        *tmp = frame->end;
-        tmp += sizeof(frame->end);
-    }
-
-    return buf;
-}
-
-void GetGeneralFrameFromBuffer(struct General_Frame* frame, unsigned char* buf, int length)
+void GetGeneralFrameFromBuffer(unsigned char* buf, int length)
 {
     unsigned char type;
     unsigned short channel;
@@ -694,7 +624,7 @@ void ExtractLongString(unsigned char** in, struct LongString* out)
 // Class ID: 10
 // Method ID: 11
 // Mechanism: "PLAIN"
-// Response: guest/guest
+// Response: guest/guest (our login credentials)
 // Locale: "en_US"
 void BuildStartOkPayload(unsigned char** payload, int* length)
 {
@@ -911,7 +841,7 @@ void BuildPublishPayload(unsigned char** payload, int* length)
         0,40,
         // reserved-1 (short)
         0,
-        // exchange
+        // exchange (short string)
         1,0,
         // routing key/queue name (short string)
         10,'l','e','e','.','t','e','s','t','.','q',
@@ -977,8 +907,9 @@ further property flags field follows. There are many property flags fields as ne
         totalBodySize & 0xFF,
 
         // property flags
-        (propertyFlags >> 8) & 0xFF,
-        propertyFlags & 0xFF
+        0,0
+        //(propertyFlags >> 8) & 0xFF,
+        //propertyFlags & 0xFF
         // property list
         //10,'t','e','x','t','/','p','l','a','i','n'
         //16,'a','p','p','l','i','c','a','t','i','o','n','/','j','s','o','n'
