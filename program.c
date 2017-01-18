@@ -962,7 +962,7 @@ further property flags field follows. There are many property flags fields as ne
 */
     unsigned short CONTENT_TYPE = 0x8000;
     unsigned short CONTENT_ENCODING = 0x4000;
-    unsigned short propertyFlags = CONTENT_ENCODING;
+    unsigned short propertyFlags = 0;//CONTENT_ENCODING;
     unsigned char data[] = {
         // class id
         0,60,
@@ -978,11 +978,11 @@ further property flags field follows. There are many property flags fields as ne
 
         // property flags
         (propertyFlags >> 8) & 0xFF,
-        propertyFlags & 0xFF,
+        propertyFlags & 0xFF
         // property list
         //10,'t','e','x','t','/','p','l','a','i','n'
         //16,'a','p','p','l','i','c','a','t','i','o','n','/','j','s','o','n'
-        4,'u','t','f','8'
+        //4,'u','t','f','8'
     };
 
     printf("Publishing %d bytes of content\n", totalBodySize);
