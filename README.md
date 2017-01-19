@@ -22,6 +22,7 @@ Default Rabbit MQ setup:
 I created a queue named, ```lee.test.q```.
 
 I am using [CMake] as my build utility but it's really a bit of overkill for this. My files: 
+
 1. program.c 
    * The main program lives here. So does virtually all of the code.
 1. program.h 
@@ -44,6 +45,7 @@ The job that this code performs is to publish the message, _"Hello, there!"_ to 
 it was a simple matter of opening a TCP socket and pushing some bytes to it. Oh how naive that thought was!
 
 Turns out, my steps were more along the lines of:
+
 1. Open a TCP socket to the server
 1. Push a Protocol message to get things started: ```{'A','M','Q','P',0,0,9,1}```
 1. Get back a **Start** message
