@@ -632,10 +632,9 @@ void ExtractShortString(unsigned char** in, struct ShortString* out)
     out->length = **in;
     *in += 1;
 
-    // TODO Validate malloc
+    // TODO Validate calloc
     out->content = (char*) calloc(out->length+1, sizeof(char));
 
-    memset(out->content, 0, out->length+1);
     memcpy(out->content, *in, out->length);
     *in += out->length;
 }
@@ -648,10 +647,9 @@ void ExtractLongString(unsigned char** in, struct LongString* out)
     out->length = BytesToInt(*in);
     *in += 4;
 
-    // TODO Validate malloc
+    // TODO Validate calloc
     out->content = (unsigned char*) calloc(out->length+1, sizeof(unsigned char));
 
-    memset(out->content, 0, out->length+1);
     memcpy(out->content, *in, out->length);
     *in += out->length;
 }
