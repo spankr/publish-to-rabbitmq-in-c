@@ -7,11 +7,11 @@ I wrote this as a guide for writing embedded logic on a microcontroller. That mi
 aka an alert.
 
 My goal was not elegance. My goal was to create an MVP (minimally viable product) that is purely a learning tool...so yes, there is repeated code 
-and its not as [clean][clean] as it could be.
+and its not as [clean] as it could be.
 
 ## My Environment
 
-I am running a [RabbitMQ][RabbitMQ] server on a local [Docker][Docker] container. I am using the [rabbitmq/3-management][1] image.
+I am running a [RabbitMQ] server on a local [Docker] container. I am using the [rabbitmq/3-management][1] image.
 
 Default Rabbit MQ setup:
 * Port ```5672```
@@ -21,7 +21,7 @@ Default Rabbit MQ setup:
 
 I created a queue named, ```lee.test.q```.
 
-I am using [CMake][CMake] as my build utility but it's really a bit of overkill for this. My files: 
+I am using [CMake] as my build utility but it's really a bit of overkill for this. My files: 
 1. program.c 
    * The main program lives here. So does virtually all of the code.
 1. program.h 
@@ -84,18 +84,18 @@ done better work than I.
    * Another project I dug through for information.
 1. [StackOverflow](http://stackoverflow.com/questions/3784263/converting-an-int-into-a-4-byte-char-array-c)
    * I haven't messed with bits && bytes since before StackOverflow was born. Packing/Unpacking integers to bytes escaped me one afternoon. Thank you, StackOverflow!
-1. [Google][Google]
+1. [Google]
    * I still remember what programming was like before there was Google. I don't want to go back to those days.
 
 
-[RabbitMQ]: "https://www.rabbitmq.com" "Rabbit MQ"
-[Docker]: "https://www.docker.com" "Docker"
-[CMake]: "https://cmake.org" "CMake"
-[clean]: "https://www.google.com/webhp?sourceid=chrome-instant&ion=1&espv=2&ie=UTF-8#q=writing%20clean%20code" "Writing clean code"
-[SASL]: "https://tools.ietf.org/html/rfc4616" "SASL Spec"
-[Google]: "https://www.google.com/"
-[1]: "https://hub.docker.com/_/rabbitmq/" "RabbitMQ 3-Management Image"
-[2]: "https://www.rabbitmq.com/resources/specs/amqp0-9-1.pdf"
-[3]: "https://www.rabbitmq.com/resources/specs/amqp0-9-1.xml"
-[4]: "https://www.rabbitmq.com/amqp-0-9-1-reference.html"
+[RabbitMQ]: https://www.rabbitmq.com "Rabbit MQ"
+[Docker]: https://www.docker.com "Docker"
+[CMake]: https://cmake.org "CMake"
+[clean]: https://www.google.com/webhp?sourceid=chrome-instant&ion=1&espv=2&ie=UTF-8#q=writing%20clean%20code "Writing clean code"
+[SASL]: https://tools.ietf.org/html/rfc4616 "SASL Spec"
+[Google]: https://www.google.com/
+[1]: https://hub.docker.com/_/rabbitmq/ "RabbitMQ 3-Management Image"
+[2]: https://www.rabbitmq.com/resources/specs/amqp0-9-1.pdf
+[3]: https://www.rabbitmq.com/resources/specs/amqp0-9-1.xml
+[4]: https://www.rabbitmq.com/amqp-0-9-1-reference.html
 
