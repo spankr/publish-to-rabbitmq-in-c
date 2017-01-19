@@ -691,7 +691,7 @@ void BuildStartOkPayload(unsigned char** payload, int* length)
         // information 'S', http://www.digikey.com
         11,'i','n','f','o','r','m','a','t','i','o','n',
         'S',
-        0,0,0,22,'h','t','t','p',':','/','/','w','w','w','.','d','i','g','i','k','e','y','.','c','o','m'
+        0,0,0,22,'h','t','t','p',':','/','/','w','w','w','.','d','o','g','e','k','e','y','.','o','r','g'
     };
     // mechanism (short string)
     unsigned char mechanism[] = {5,'P','L','A','I','N'};
