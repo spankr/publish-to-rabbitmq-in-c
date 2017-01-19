@@ -11,7 +11,7 @@ and its not as [clean] as it could be.
 
 ## My Environment
 
-I am running a [RabbitMQ] server on a local [Docker] container. I am using the [rabbitmq/3-management][1] image.
+I am running a [RabbitMQ] server on a local [Docker] container. The [rabbitmq/3-management][1] image, to be precise.
 
 Default Rabbit MQ setup:
 * Port ```5672```
@@ -21,7 +21,9 @@ Default Rabbit MQ setup:
 
 I created a queue named, ```lee.test.q```.
 
-I am using [CMake] as my build utility but it's really a bit of overkill for this. My files: 
+I am using [CMake] as my build utility but it's a bit of overkill for this. (That and I'm getting used to CMake) 
+
+My files: 
 
 1. program.c 
    * The main program lives here. So does virtually all of the code.
@@ -31,7 +33,7 @@ I am using [CMake] as my build utility but it's really a bit of overkill for thi
    * When playing with arrays of bytes, sometimes you have to extract out short and integer numbers. I have some conversion routines in here to help me out.
 
 ## Specs
-I had to do a lot of pouring over [AMQP specifications][2] and cross-referencing things because they just weren't clear enough for me.
+I had to do a lot of pouring over [AMQP specifications][2] and cross-referencing things because they just weren't clear enough for me, right off the bat.
 RabbitMQ has some nice documentation on the various [AMQP methods][4] I needed but to really track down the details of the data structures and values,
 I had to use the [XML specification][3].
 
