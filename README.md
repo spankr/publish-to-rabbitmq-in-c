@@ -14,6 +14,7 @@ and its not as [clean] as it could be.
 I am running a [RabbitMQ] server on a local [Docker] container. The [rabbitmq/3-management][1] image, to be precise.
 
 Default Rabbit MQ setup:
+
 * Port ```5672```
 * Username ```guest```
 * Password ```guest```
@@ -26,11 +27,11 @@ I am using [CMake] as my build utility but it's a bit of overkill for this. (Tha
 My files: 
 
 1. program.c 
-   * The main program lives here. So does virtually all of the code.
+    * The main program lives here. So does virtually all of the code.
 1. program.h 
-   * The header file. Includes, some defines and some structure definitions for the most part. I also included some function prototypes for visibility.
+    * The header file. Includes, some defines and some structure definitions for the most part. I also included some function prototypes for visibility.
 1. converters.c 
-   * When playing with arrays of bytes, sometimes you have to extract out short and integer numbers. I have some conversion routines in here to help me out.
+    * When playing with arrays of bytes, sometimes you have to extract out short and integer numbers. I have some conversion routines in here to help me out.
 
 ## Specs
 I had to do a lot of pouring over [AMQP specifications][2] and cross-referencing things because they just weren't clear enough for me, right off the bat.
