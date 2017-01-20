@@ -82,15 +82,15 @@ No work nor assistance should go unpunis....er, unrecognized. I'll freely admit 
 done better work than I.
 
 1. [rabbitmq-c](https://github.com/alanxz/rabbitmq-c) library. 
-   * This is a nice C library maintained by [alanxz](https://github.com/alanxz). If you are looking for a library for RabbitMQ communication, this is what you want!
+    * This is a nice C library maintained by [alanxz](https://github.com/alanxz). If you are looking for a library for RabbitMQ communication, this is what you want!
 1. [RabbitMQ .NET Client](https://github.com/rabbitmq/rabbitmq-dotnet-client)
-   * I datamined this library for message structures when the specs failed me.
+    * I datamined this library for message structures when the specs failed me.
 1. [AMQP-CPP](https://github.com/CopernicaMarketingSoftware/AMQP-CPP)
-   * Another project I dug through for information.
+    * Another project I dug through for information.
 1. [StackOverflow](http://stackoverflow.com/questions/3784263/converting-an-int-into-a-4-byte-char-array-c)
-   * I haven't messed with bits && bytes since before StackOverflow was born. Packing/Unpacking integers to bytes escaped me one afternoon. Thank you, StackOverflow!
+    * I haven't messed with bits && bytes since before StackOverflow was born. Packing/Unpacking integers to bytes escaped me one afternoon. Thank you, StackOverflow!
 1. [Google]
-   * I still remember what programming was like before there was Google. I don't want to go back to those days.
+    * I still remember what programming was like before there was Google. I don't want to go back to those days.
 
 
 [RabbitMQ]: https://www.rabbitmq.com "Rabbit MQ"
